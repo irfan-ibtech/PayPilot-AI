@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Route;
 
 // Public Authentication
 Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/login', [AuthController::class, 'login'])->name('login');
 
 // Authenticated Merchant Routes
 Route::middleware('auth:sanctum')->group(function () {
