@@ -337,4 +337,184 @@ class PayPalSandboxIntegrationTest extends TestCase
         $this->assertFalse((bool) $payment->is_simulated);
         $this->assertEquals('PAID', $order->status);
     }
+
+    /**
+     * Test: Network timeout during capture safely sets status to REQUIRES_RECONCILIATION.
+     */
+    public function test_network_timeout_during_capture_transitions_to_requires_reconciliation(): void
+    {
+        $user = User::factory()->create();
+        $order = Order::create([
+            'user_id' => $user->id,
+            'order_number' => 'PP-TIMEOUT-001',
+            'subtotal' => '50.00',
+            'total' => '50.00',
+            'currency' => 'USD',
+            'status' => 'PENDING',
+        ]);
+
+        $payment = Payment::create([
+            'order_id' => $order->id,
+            'user_id' => $user->id,
+            'provider' => 'paypal',
+            'paypal_order_id' => 'TIMEOUT-PP-ORDER',
+            'amount' => '50.00',
+            'currency' => 'USD',
+            'status' => 'CREATED',
+            'attempt_number' => 1,
+            'is_simulated' => false,
+        ]);
+
+        $payPalMock = Mockery::mock(PayPalService::class);
+        $payPalMock->shouldReceive('capturePayment')
+            ->once()
+            ->andThrow(new RuntimeException('cURL error 28: Connection timed out after 10001 milliseconds'));
+        $this->app->instance(PayPalService::class, $payPalMock);
+
+        $response = $this->actingAs($user)->postJson('/api/payments/paypal/capture', [
+            'paypal_order_id' => 'TIMEOUT-PP-ORDER',
+        ]);
+
+        $response->assertStatus(504)
+            ->assertJson([
+                'status' => 'REQUIRES_RECONCILIATION',
+            ]);
+
+        $payment->refresh();
+        $this->assertEquals('REQUIRES_RECONCILIATION', $payment->status);
+        $this->assertStringContainsString('timed out', $payment->failure_reason);
+        $this->assertEquals('PENDING', $order->fresh()->status);
+    }
+
+    /**
+     * Test: Currency mismatch during capture is strictly rejected with 422.
+     */
+    public function test_currency_mismatch_during_capture_is_rejected(): void
+    {
+        $user = User::factory()->create();
+        $order = Order::create([
+            'user_id' => $user->id,
+            'order_number' => 'PP-CUR-MISMATCH',
+            'subtotal' => '100.00',
+            'total' => '100.00',
+            'currency' => 'USD',
+            'status' => 'PENDING',
+        ]);
+
+        Payment::create([
+            'order_id' => $order->id,
+            'user_id' => $user->id,
+            'provider' => 'paypal',
+            'paypal_order_id' => 'CUR-MISMATCH-ORDER',
+            'amount' => '100.00',
+            'currency' => 'USD',
+            'status' => 'CREATED',
+            'attempt_number' => 1,
+            'is_simulated' => false,
+        ]);
+
+        // PayPal returns EUR instead of USD
+        $payPalMock = Mockery::mock(PayPalService::class);
+        $payPalMock->shouldReceive('capturePayment')
+            ->once()
+            ->andReturn([
+                'id' => 'CUR-MISMATCH-ORDER',
+                'status' => 'COMPLETED',
+                'is_simulated' => false,
+                'purchase_units' => [
+                    [
+                        'payments' => [
+                            'captures' => [
+                                [
+                                    'id' => 'CAPTURE-WRONG-CURRENCY',
+                                    'status' => 'COMPLETED',
+                                    'amount' => [
+                                        'value' => '100.00',
+                                        'currency_code' => 'EUR', // Mismatched currency
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ]);
+        $this->app->instance(PayPalService::class, $payPalMock);
+
+        $response = $this->actingAs($user)->postJson('/api/payments/paypal/capture', [
+            'paypal_order_id' => 'CUR-MISMATCH-ORDER',
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonFragment([
+                'message' => 'Security verification failed: Captured amount or currency mismatch.',
+            ]);
+
+        $this->assertEquals('PENDING', $order->fresh()->status);
+    }
+
+    /**
+     * Test: Unapproved recovery opportunity checkout is strictly blocked.
+     */
+    public function test_unapproved_recovery_checkout_is_strictly_blocked(): void
+    {
+        $user = User::factory()->create();
+        $order = Order::create([
+            'user_id' => $user->id,
+            'order_number' => 'PP-UNAPPROVED-REC',
+            'subtotal' => '85.00',
+            'total' => '85.00',
+            'currency' => 'USD',
+            'status' => 'FAILED',
+        ]);
+
+        $opportunity = RecoveryOpportunity::create([
+            'user_id' => $user->id,
+            'order_id' => $order->id,
+            'recovery_score' => 80,
+            'priority_level' => 'HIGH',
+            'strategy_key' => 'VIP_DIRECT',
+            'status' => 'PENDING', // NOT approved!
+            'workflow_state' => 'DIAGNOSED',
+        ]);
+
+        $response = $this->actingAs($user)->postJson("/api/recovery/opportunities/{$opportunity->id}/checkout");
+
+        $response->assertStatus(400)
+            ->assertJsonFragment([
+                'message' => 'Recovery checkout initialization failed: Opportunity must be approved by the merchant before launching recovery checkout (current status: PENDING).',
+            ]);
+    }
+
+    /**
+     * Test: Cross-merchant recovery opportunity access is strictly blocked (IDOR protection).
+     */
+    public function test_cross_merchant_recovery_opportunity_access_is_blocked(): void
+    {
+        $merchantA = User::factory()->create();
+        $merchantB = User::factory()->create();
+
+        $orderB = Order::create([
+            'user_id' => $merchantB->id,
+            'order_number' => 'PP-IDOR-REC-001',
+            'subtotal' => '50.00',
+            'total' => '50.00',
+            'currency' => 'USD',
+            'status' => 'FAILED',
+        ]);
+
+        $oppB = RecoveryOpportunity::create([
+            'user_id' => $merchantB->id,
+            'order_id' => $orderB->id,
+            'recovery_score' => 75,
+            'priority_level' => 'MEDIUM',
+            'strategy_key' => 'STANDARD',
+            'status' => 'APPROVED',
+            'workflow_state' => 'APPROVED_FOR_OUTREACH',
+        ]);
+
+        // Merchant A attempts to access or checkout Merchant B's opportunity
+        $response = $this->actingAs($merchantA)->postJson("/api/recovery/opportunities/{$oppB->id}/checkout");
+
+        $response->assertStatus(404);
+    }
 }

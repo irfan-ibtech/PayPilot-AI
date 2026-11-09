@@ -1,8 +1,8 @@
 # PayPilot AI 🚀
 ### Enterprise AI Revenue Recovery, Autonomous Commerce & PayPal v2 Settlement Platform
 
-[![PayPal REST API](https://img.shields.io/badge/PayPal-REST%20API%20v2-003087?style=for-the-badge&logo=paypal&logoColor=white)](https://developer.paypal.com/)
-[![Google Gemini](https://img.shields.io/badge/Google%20Gemini-2.5%20Flash-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
+[![PayPal REST API](https://img.shields.io/badge/PayPal-REST%20API%20v2%20(Sandbox)-003087?style=for-the-badge&logo=paypal&logoColor=white)](https://developer.paypal.com/)
+[![Google Gemini](https://img.shields.io/badge/Google%20Gemini-3.1%20Flash%20Lite-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
 [![Laravel](https://img.shields.io/badge/Laravel-12.x-FF2D20?style=for-the-badge&logo=laravel&logoColor=white)](https://laravel.com/)
 [![React](https://img.shields.io/badge/React-19.x%20TypeScript-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4.x-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
@@ -20,7 +20,7 @@ Every year, global e-commerce merchants lose **over \$18 billion to checkout aba
 
 **PayPilot AI** revolutionizes SMB and enterprise commerce by deploying an **Autonomous, Approval-Governed AI Revenue Recovery Agent** coupled with an end-to-end, zero-trust commerce operating system:
 
-1. **AI Natural Language Order Assistant:** Parse messy merchant quotes and verbal descriptions into structured line items using Gemini 2.5 Flash.
+1. **AI Natural Language Order Assistant:** Parse messy merchant quotes and verbal descriptions into structured line items using Google Gemini (configurable model, defaults to `gemini-3.1-flash-lite`).
 2. **Catalog-Enforced Zero-Trust Pricing:** LLM mathematical output is never trusted. Prices are resolved strictly against merchant database catalogs, and all subtotals/totals are calculated via BCMath arbitrary precision (`scale = 2`).
 3. **Instant PayPal REST API v2 Checkout:** Native integration with PayPal Orders v2 with multi-attempt ledger history and upstream `PayPal-Request-Id` idempotency.
 4. **Pessimistic Concurrency & Anti-Tampering Engine:** Database transactions lock rows (`lockForUpdate()`) to prevent race conditions across webhooks, user retries, and AI automated captures. Captured values and currencies are mathematically verified before settlement.
@@ -153,10 +153,15 @@ Payment capture requests in `PaymentController::capturePayPalOrder` are wrapped 
 ### 4. Catalog Price Binding in Natural Language Order Parsing
 When extracting orders from natural language, `AIOrderController::parse()` matches extracted names against the merchant's authenticated `Product` catalog. If matched, the price is pulled directly from `products.unit_price`, binding `product_id` and setting `catalog_matched: true`. Prompt injection attacks attempting to purchase items for \$0.01 are neutralized.
 
-### 5. Gemini 2.5 Flash Upgrade & Robust Timeouts
-- Uses Google's latest `gemini-2.5-flash` model for higher inference reasoning and strict JSON schema adherence.
+### 5. Gemini 3.1 Flash Lite Upgrade & Robust Timeouts
+- Uses Google's fast and highly efficient `gemini-3.1-flash-lite` model for reasoning and strict JSON schema adherence.
 - Outbound requests feature strict HTTP timeouts (`timeout: 15s`, `connectTimeout: 5s`).
 - Prompts are automatically sanitized to neutralize prompt injection vectors.
+
+### 6. PayPal REST API v2 Sandbox Testing Notice
+- All payment operations in this submission interface with the authentic **PayPal Sandbox environment** (`https://api-m.sandbox.paypal.com`).
+- Sandbox transactions utilize virtual buyer balances and developer test cards; no real monetary funds are charged or settled during evaluation.
+- Simulated captures for offline development are strictly segregated from genuine PayPal captures via the `is_simulated` schema flag and accounting partitions.
 
 ---
 
@@ -196,6 +201,18 @@ php artisan test
  PASS  Tests\Feature\ExampleTest
  ✓ it returns a successful response
 
+ PASS  Tests\Feature\PayPalSandboxIntegrationTest
+ ✓ missing credentials throws clear configuration error
+ ✓ invalid credentials throws clear authentication error
+ ✓ order creation throws exception on paypal error without silent simulation
+ ✓ genuine paypal capture sets is simulated false and marks order paid
+ ✓ simulated captures do not increment genuine recovered revenue
+ ✓ reconciliation queries paypal api and syncs completed state
+ ✓ network timeout during capture transitions to requires reconciliation
+ ✓ currency mismatch during capture is rejected
+ ✓ unapproved recovery checkout is strictly blocked
+ ✓ cross merchant recovery opportunity access is blocked
+
  PASS  Tests\Feature\PaymentSecurityTest
  ✓ rejects tampered or mismatched payment amount on capture
  ✓ idempotent capture returns cached success without duplicate processing
@@ -211,8 +228,8 @@ php artisan test
  ✓ capturing paypal order reconciles active recovery opportunity to recovered
  ✓ recovery metrics endpoint aggregates deterministic pipeline totals
 
-Tests:    13 passed (75 assertions)
-Duration: 0.16s
+Tests:    23 passed (113 assertions)
+Duration: 4.38s
 ```
 
 ---
