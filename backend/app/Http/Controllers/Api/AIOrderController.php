@@ -57,6 +57,8 @@ class AIOrderController extends Controller
                     || str_contains(mb_strtolower($prod->name), mb_strtolower($rawName));
             });
 
+            $promptUnitPrice = isset($item['unit_price']) ? Money::format($item['unit_price']) : null;
+
             if ($matchedProduct) {
                 $unitPrice = Money::format($matchedProduct->unit_price);
                 $productId = $matchedProduct->id;
@@ -76,6 +78,7 @@ class AIOrderController extends Controller
                 'name' => $productName,
                 'quantity' => $quantity,
                 'unit_price' => $unitPrice,
+                'prompt_unit_price' => $promptUnitPrice,
                 'line_total' => $lineTotal,
                 'product_id' => $productId,
                 'catalog_matched' => $catalogMatched,

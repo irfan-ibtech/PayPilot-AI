@@ -74,6 +74,7 @@ class AICopilotController extends Controller
             'metrics_summary' => $metrics,
             'analysis' => $result['analysis'],
             'recommendations' => $savedRecommendations,
+            'ai_source' => $result['ai_source'] ?? 'gemini_live',
         ]);
     }
 

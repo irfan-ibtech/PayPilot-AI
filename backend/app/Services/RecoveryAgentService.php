@@ -224,6 +224,57 @@ class RecoveryAgentService
     }
 
     /**
+     * Re-analyze an opportunity using the live Gemini diagnostic agent.
+     */
+    public function analyzeOpportunity(RecoveryOpportunity $opportunity, int $userId): RecoveryOpportunity
+    {
+        if ($opportunity->user_id !== $userId) {
+            throw new Exception('Unauthorized opportunity access.');
+        }
+
+        $order = $opportunity->order;
+        $payments = $order->payments;
+        $lastPayment = $payments->last();
+        $failureReason = $opportunity->failure_reason_summary ?: ($lastPayment?->failure_reason ?? 'Payment session interrupted');
+        $hoursSinceCreation = max(1, (int) round(now()->diffInMinutes($order->created_at) / 60));
+        $itemsSummary = $order->items->map(fn($item) => "{$item->quantity}x {$item->product_name}")->join(', ');
+
+        $aiStrategy = $this->geminiService->generateRecoveryStrategy([
+            'order' => [
+                'id' => $order->id,
+                'order_number' => $order->order_number,
+                'total' => $order->total,
+                'currency' => $order->currency,
+            ],
+            'amount' => Money::format($order->total),
+            'currency' => $order->currency,
+            'items_description' => $itemsSummary ?: 'Store products',
+            'failure_reason' => $failureReason,
+            'attempt_count' => $payments->count(),
+            'hours_since_dropoff' => $hoursSinceCreation,
+        ]);
+
+        $audit = $opportunity->audit_trail ?? [];
+        $audit[] = [
+            'action' => 'ANALYZED',
+            'actor' => 'GEMINI_LIVE_AGENT',
+            'timestamp' => now()->toIso8601String(),
+            'details' => "Re-analyzed via live AI diagnostic engine (" . ($aiStrategy['ai_source'] ?? 'gemini_live') . ").",
+        ];
+
+        $opportunity->update([
+            'ai_summary' => $aiStrategy['ai_summary'],
+            'ai_reasoning' => $aiStrategy['ai_reasoning'],
+            'ai_recommended_action' => $aiStrategy['ai_recommended_action'],
+            'customer_message_draft' => $aiStrategy['customer_message_draft'],
+            'ai_confidence' => $aiStrategy['ai_confidence'],
+            'audit_trail' => $audit,
+        ]);
+
+        return $opportunity->fresh(['order.items', 'latestPayment']);
+    }
+
+    /**
      * Prepare instant PayPal checkout session for approved recovery opportunity.
      */
     public function prepareRecoveryCheckout(RecoveryOpportunity $opportunity, int $userId): array

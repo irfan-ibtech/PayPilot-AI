@@ -35,7 +35,7 @@ const MainLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      <Navbar />
+      <Navbar currentTab={currentTab} onSelectTab={setCurrentTab} />
       <div className="flex-1 flex">
         <Sidebar currentTab={currentTab} onSelectTab={setCurrentTab} />
         <main className="flex-1 p-8 overflow-y-auto max-w-7xl">
@@ -51,7 +51,12 @@ const MainLayout: React.FC = () => {
           {currentTab === 'assistant' && (
             <OrderAssistant onNavigateDashboard={() => setCurrentTab('dashboard')} />
           )}
-          {currentTab === 'copilot' && <Copilot />}
+          {currentTab === 'copilot' && (
+            <Copilot
+              onNavigateRecovery={() => setCurrentTab('recovery')}
+              onNavigateAssistant={() => setCurrentTab('assistant')}
+            />
+          )}
           {currentTab === 'products' && (
             <Dashboard onNavigateCopilot={() => setCurrentTab('copilot')} />
           )}

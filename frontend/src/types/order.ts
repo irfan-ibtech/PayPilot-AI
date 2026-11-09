@@ -17,6 +17,11 @@ export interface PaymentRecord {
   amount: number | string;
   currency: string;
   status: string;
+  attempt_number?: number;
+  idempotency_key?: string | null;
+  failure_reason?: string | null;
+  is_recovery_attempt?: boolean;
+  is_demo_seed?: boolean;
   captured_at?: string | null;
   created_at: string;
 }
@@ -30,6 +35,7 @@ export interface Order {
   currency: string;
   status: 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED';
   notes?: string | null;
+  is_demo_seed?: boolean;
   items?: OrderItem[];
   payment?: PaymentRecord | null;
   payments?: PaymentRecord[];

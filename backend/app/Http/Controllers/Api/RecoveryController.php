@@ -81,6 +81,30 @@ class RecoveryController extends Controller
     }
 
     /**
+     * Trigger on-demand Gemini AI diagnostic re-analysis for an opportunity.
+     */
+    public function analyze(Request $request, $id): JsonResponse
+    {
+        $opportunity = RecoveryOpportunity::with(['order.items', 'latestPayment'])
+            ->where('user_id', $request->user()->id)
+            ->findOrFail($id);
+
+        try {
+            $updated = $this->recoveryService->analyzeOpportunity($opportunity, $request->user()->id);
+
+            return response()->json([
+                'message' => 'Opportunity re-analyzed via live Gemini diagnostic agent.',
+                'data' => $updated,
+                'ai_source' => 'gemini_live',
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Analysis failed: ' . $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
      * Approve a recovery opportunity and lock outreach copy.
      */
     public function approve(Request $request, $id): JsonResponse

@@ -56,6 +56,7 @@ export interface RecoveryMetrics {
   recovered_count: number;
   rejected_count: number;
   potential_recoverable_revenue: number;
+  potential_revenue?: number;
   formatted_potential_revenue: string;
   recovered_revenue: number;
   formatted_recovered_revenue: string;

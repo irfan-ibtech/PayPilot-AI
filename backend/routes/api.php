@@ -54,6 +54,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/recovery/opportunities', [RecoveryController::class, 'index']);
     Route::post('/recovery/scan', [RecoveryController::class, 'scan']);
     Route::get('/recovery/opportunities/{id}', [RecoveryController::class, 'show']);
+    Route::post('/recovery/opportunities/{id}/analyze', [RecoveryController::class, 'analyze']);
     Route::post('/recovery/opportunities/{id}/approve', [RecoveryController::class, 'approve']);
     Route::post('/recovery/opportunities/{id}/reject', [RecoveryController::class, 'reject']);
     Route::post('/recovery/opportunities/{id}/checkout', [RecoveryController::class, 'launchCheckout']);

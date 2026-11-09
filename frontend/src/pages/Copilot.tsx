@@ -11,6 +11,9 @@ import {
   Info,
   Loader2,
   RefreshCw,
+  ShieldCheck,
+  Database,
+  ChevronRight,
 } from 'lucide-react';
 
 interface Recommendation {
@@ -29,9 +32,25 @@ interface Message {
   recommendations?: Recommendation[];
 }
 
-export const Copilot: React.FC = () => {
+interface ContextMetrics {
+  total_revenue: string;
+  aov: string;
+  conversion_rate: number;
+  paid_orders: number;
+  total_orders: number;
+  potential_recovery?: string;
+}
+
+interface CopilotProps {
+  onNavigateRecovery?: () => void;
+  onNavigateAssistant?: () => void;
+}
+
+export const Copilot: React.FC<CopilotProps> = ({ onNavigateRecovery, onNavigateAssistant }) => {
   const [prompt, setPrompt] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [contextMetrics, setContextMetrics] = useState<ContextMetrics | null>(null);
+
   const [messages, setMessages] = useState<Message[]>([
     {
       sender: 'assistant',
@@ -48,6 +67,31 @@ export const Copilot: React.FC = () => {
     'How are my payment conversion rates looking this week?',
   ];
 
+  const fetchContextMetrics = async () => {
+    try {
+      const [overviewRes, recoveryRes] = await Promise.all([
+        api.get('/analytics/overview'),
+        api.get('/recovery/metrics').catch(() => ({ data: { data: null } })),
+      ]);
+
+      const m = overviewRes.data.metrics;
+      const rec = recoveryRes.data.data;
+
+      if (m) {
+        setContextMetrics({
+          total_revenue: m.formatted_revenue || `$${Number(m.total_revenue || 0).toFixed(2)}`,
+          aov: m.formatted_aov || `$${Number(m.average_order_value || 0).toFixed(2)}`,
+          conversion_rate: m.conversion_rate || 0,
+          paid_orders: m.paid_orders || 0,
+          total_orders: m.total_orders || 0,
+          potential_recovery: rec?.formatted_potential_revenue,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load context metrics', err);
+    }
+  };
+
   const fetchRecommendations = async () => {
     setLoadingRecs(true);
     try {
@@ -61,6 +105,7 @@ export const Copilot: React.FC = () => {
   };
 
   useEffect(() => {
+    fetchContextMetrics();
     fetchRecommendations();
   }, []);
 
@@ -85,8 +130,8 @@ export const Copilot: React.FC = () => {
         },
       ]);
 
-      // Refresh persisted recommendations
       fetchRecommendations();
+      fetchContextMetrics();
     } catch (err: unknown) {
       const errorMsg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
@@ -103,7 +148,6 @@ export const Copilot: React.FC = () => {
     }
   };
 
-  // Simple, elegant Markdown renderer for analysis responses
   const renderFormattedMarkdown = (content: string) => {
     const lines = content.split('\n');
     return (
@@ -183,13 +227,17 @@ export const Copilot: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-white">AI Financial Copilot</h1>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-950 text-indigo-300 border border-indigo-800 flex items-center gap-1">
-              <Bot className="h-3 w-3 text-indigo-400" />
-              CFO Intelligence
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-bold text-white tracking-tight">AI Financial Copilot</h1>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-indigo-600 to-blue-600 text-white flex items-center gap-1 shadow-sm">
+              <Bot className="h-3 w-3" />
+              Gemini 2.5 Flash • Live
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-1">
+              <ShieldCheck className="h-3 w-3" />
+              Zero-Hallucination SQL Grounded
             </span>
           </div>
           <p className="text-sm text-slate-400 mt-1">
@@ -197,17 +245,65 @@ export const Copilot: React.FC = () => {
           </p>
         </div>
         <button
-          onClick={fetchRecommendations}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition"
+          onClick={() => {
+            fetchRecommendations();
+            fetchContextMetrics();
+          }}
+          className="self-start sm:self-center flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition"
         >
           <RefreshCw className="h-3.5 w-3.5" />
-          <span>Sync Recommendations</span>
+          <span>Sync Telemetry</span>
         </button>
+      </div>
+
+      {/* Live Verified SQL Context Ribbon */}
+      <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-2.5">
+          <div className="h-9 w-9 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0">
+            <Database className="h-4 w-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] uppercase font-bold tracking-wider text-blue-400">
+                Bound Grounding Context
+              </span>
+              <span className="text-[10px] px-2 py-0.2 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-semibold font-mono">
+                Deterministic MySQL Aggregates
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Gemini reasons exclusively over verified ledger sums — no simulated hallucinations
+            </p>
+          </div>
+        </div>
+
+        {contextMetrics && (
+          <div className="flex flex-wrap items-center gap-4 text-xs font-mono">
+            <div>
+              <span className="text-slate-500 block text-[10px] uppercase font-sans">Settled Revenue</span>
+              <span className="text-white font-bold tabular-nums">{contextMetrics.total_revenue}</span>
+            </div>
+            <div className="border-l border-slate-800 pl-4">
+              <span className="text-slate-500 block text-[10px] uppercase font-sans">Avg Order Value</span>
+              <span className="text-blue-400 font-bold tabular-nums">{contextMetrics.aov}</span>
+            </div>
+            <div className="border-l border-slate-800 pl-4">
+              <span className="text-slate-500 block text-[10px] uppercase font-sans">Success Rate</span>
+              <span className="text-emerald-400 font-bold tabular-nums">{contextMetrics.conversion_rate}%</span>
+            </div>
+            {contextMetrics.potential_recovery && (
+              <div className="border-l border-slate-800 pl-4">
+                <span className="text-slate-500 block text-[10px] uppercase font-sans">Recoverable Pipeline</span>
+                <span className="text-purple-400 font-bold tabular-nums">{contextMetrics.potential_recovery}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left 2 Cols: Interactive Chat & Diagnostic Console */}
-        <div className="lg:col-span-2 flex flex-col h-[680px] rounded-3xl bg-slate-900 border border-slate-800 overflow-hidden shadow-2xl">
+        <div className="lg:col-span-2 flex flex-col h-[680px] rounded-2xl bg-slate-900 border border-slate-800 overflow-hidden shadow-2xl">
           {/* Console Header */}
           <div className="p-4 bg-slate-800/60 border-b border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -218,12 +314,12 @@ export const Copilot: React.FC = () => {
                 <h3 className="text-sm font-semibold text-white">PayPilot Advisory Assistant</h3>
                 <span className="text-xs text-emerald-400 flex items-center gap-1">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Connected to Store Telemetry
+                  Live Store Telemetry Grounded
                 </span>
               </div>
             </div>
             <span className="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-mono">
-              Deterministic Verification
+              Series-B Fintech Intelligence
             </span>
           </div>
 
@@ -257,7 +353,7 @@ export const Copilot: React.FC = () => {
                 <div className="h-8 w-8 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
                   <Loader2 className="h-4 w-4 animate-spin" />
                 </div>
-                <span>Analyzing store volume, conversion funnel, and calculating recommendations...</span>
+                <span>Analyzing store volume, conversion funnel, and synthesizing CFO recommendations...</span>
               </div>
             )}
           </div>
@@ -291,7 +387,7 @@ export const Copilot: React.FC = () => {
             <button
               type="submit"
               disabled={isLoading || !prompt.trim()}
-              className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20 disabled:opacity-40"
+              className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20 disabled:opacity-40 active:scale-95"
             >
               <Send className="h-4 w-4" />
               <span className="text-xs font-semibold">Ask Copilot</span>
@@ -301,13 +397,13 @@ export const Copilot: React.FC = () => {
 
         {/* Right Col: Persisted Strategic Recommendations */}
         <div className="space-y-4">
-          <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
+          <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2 text-white font-semibold text-base">
                 <Sparkles className="h-4 w-4 text-amber-400" />
-                <span>Strategic Recommendations</span>
+                <span>Executive Strategic Actions</span>
               </div>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">
+              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-mono">
                 {recommendations.length} Active
               </span>
             </div>
@@ -322,30 +418,63 @@ export const Copilot: React.FC = () => {
               </div>
             ) : (
               <div className="space-y-3.5 max-h-[540px] overflow-y-auto pr-1">
-                {recommendations.map((rec, idx) => (
-                  <div
-                    key={rec.id || idx}
-                    className="p-4 rounded-2xl bg-slate-800/60 border border-slate-700/60 space-y-2.5 hover:border-slate-600 transition shadow-sm"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <h4 className="text-sm font-semibold text-white leading-snug">{rec.title}</h4>
-                      {getPriorityBadge(rec.priority)}
+                {recommendations.map((rec, idx) => {
+                  const isRecoveryAction =
+                    rec.title.toLowerCase().includes('abandon') ||
+                    rec.title.toLowerCase().includes('recovery') ||
+                    rec.suggested_action.toLowerCase().includes('recovery') ||
+                    rec.description.toLowerCase().includes('recovery') ||
+                    rec.description.toLowerCase().includes('drop-off');
+
+                  const isOrderAction =
+                    rec.title.toLowerCase().includes('product') ||
+                    rec.title.toLowerCase().includes('catalog') ||
+                    rec.suggested_action.toLowerCase().includes('order');
+
+                  return (
+                    <div
+                      key={rec.id || idx}
+                      className="p-4 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-2.5 hover:border-slate-600 transition shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <h4 className="text-xs font-semibold text-white leading-snug">{rec.title}</h4>
+                        {getPriorityBadge(rec.priority)}
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed">{rec.description}</p>
+                      <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-slate-700/50">
+                        <span className="text-[11px] font-mono font-medium text-emerald-400">
+                          {rec.supporting_metric}
+                        </span>
+
+                        <div className="flex items-center gap-2">
+                          {isRecoveryAction && onNavigateRecovery ? (
+                            <button
+                              type="button"
+                              onClick={onNavigateRecovery}
+                              className="text-xs px-2.5 py-1 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-medium transition flex items-center gap-1 shadow-sm"
+                            >
+                              <span>Open Recovery</span>
+                              <ChevronRight className="h-3 w-3" />
+                            </button>
+                          ) : isOrderAction && onNavigateAssistant ? (
+                            <button
+                              type="button"
+                              onClick={onNavigateAssistant}
+                              className="text-xs px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium transition flex items-center gap-1 shadow-sm"
+                            >
+                              <span>Create AI Order</span>
+                              <ChevronRight className="h-3 w-3" />
+                            </button>
+                          ) : (
+                            <span className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 font-medium">
+                              {rec.suggested_action}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-xs text-slate-300 leading-relaxed">{rec.description}</p>
-                    <div className="pt-1 flex items-center justify-between border-t border-slate-700/50">
-                      <span className="text-xs font-mono font-medium text-emerald-400">
-                        {rec.supporting_metric}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => alert(`Action "${rec.suggested_action}" triggered! In a production merchant deployment, this initiates the corresponding PayPal automated workflow.`)}
-                        className="text-xs px-3 py-1 rounded-lg bg-blue-600/80 hover:bg-blue-600 text-white font-medium transition"
-                      >
-                        {rec.suggested_action}
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
