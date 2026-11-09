@@ -47,6 +47,7 @@ interface Product {
 
 interface OrderAssistantProps {
   onNavigateDashboard?: () => void;
+  initialPrompt?: string;
 }
 
 interface ScenarioChip {
@@ -57,12 +58,20 @@ interface ScenarioChip {
   badgeColor?: string;
 }
 
-export const OrderAssistant: React.FC<OrderAssistantProps> = ({ onNavigateDashboard }) => {
+export const OrderAssistant: React.FC<OrderAssistantProps> = ({ onNavigateDashboard, initialPrompt }) => {
   // AI NLP State
-  const [prompt, setPrompt] = useState('2 wireless headphones at $45 each and one phone case at $12');
+  const [prompt, setPrompt] = useState(
+    initialPrompt || '2 wireless headphones at $45 each and one phone case at $12'
+  );
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [draftOrder, setDraftOrder] = useState<AIDraftOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialPrompt) {
+      setPrompt(initialPrompt);
+    }
+  }, [initialPrompt]);
 
   // Catalog items for quick browsing
   const [products, setProducts] = useState<Product[]>([]);

@@ -6,6 +6,8 @@ import Dashboard from './pages/Dashboard';
 import OrderAssistant from './pages/OrderAssistant';
 import Copilot from './pages/Copilot';
 import RevenueRecovery from './pages/RevenueRecovery';
+import ProductCatalog from './pages/ProductCatalog';
+import TransactionLedger from './pages/TransactionLedger';
 import Login from './pages/Login';
 import Register from './pages/Register';
 
@@ -13,6 +15,7 @@ const MainLayout: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
   const [currentTab, setCurrentTab] = useState('dashboard');
   const [authView, setAuthView] = useState<'login' | 'register'>('login');
+  const [assistantInitialPrompt, setAssistantInitialPrompt] = useState<string | undefined>(undefined);
 
   if (isLoading) {
     return (
@@ -33,6 +36,13 @@ const MainLayout: React.FC = () => {
     );
   }
 
+  const handleNavigateAssistantWithPrompt = (prompt?: string) => {
+    if (prompt) {
+      setAssistantInitialPrompt(prompt);
+    }
+    setCurrentTab('assistant');
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
       <Navbar currentTab={currentTab} onSelectTab={setCurrentTab} />
@@ -49,7 +59,10 @@ const MainLayout: React.FC = () => {
             <RevenueRecovery />
           )}
           {currentTab === 'assistant' && (
-            <OrderAssistant onNavigateDashboard={() => setCurrentTab('dashboard')} />
+            <OrderAssistant
+              onNavigateDashboard={() => setCurrentTab('dashboard')}
+              initialPrompt={assistantInitialPrompt}
+            />
           )}
           {currentTab === 'copilot' && (
             <Copilot
@@ -58,10 +71,12 @@ const MainLayout: React.FC = () => {
             />
           )}
           {currentTab === 'products' && (
-            <Dashboard onNavigateCopilot={() => setCurrentTab('copilot')} />
+            <ProductCatalog
+              onNavigateAssistant={handleNavigateAssistantWithPrompt}
+            />
           )}
           {currentTab === 'payments' && (
-            <Dashboard onNavigateCopilot={() => setCurrentTab('copilot')} />
+            <TransactionLedger />
           )}
         </main>
       </div>

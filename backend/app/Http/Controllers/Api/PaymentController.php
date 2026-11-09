@@ -231,7 +231,7 @@ class PaymentController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $payments = Payment::with('order')
+        $payments = Payment::with(['order.items'])
             ->where('user_id', $request->user()->id)
             ->latest('created_at')
             ->get();
