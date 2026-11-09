@@ -18,7 +18,12 @@ class Payment extends Model
         'paypal_capture_id',
         'amount',
         'currency',
+        'attempt_number',
+        'idempotency_key',
         'status',
+        'failure_reason',
+        'is_recovery_attempt',
+        'is_demo_seed',
         'payload',
         'captured_at',
     ];
@@ -27,6 +32,9 @@ class Payment extends Model
     {
         return [
             'amount' => 'decimal:2',
+            'attempt_number' => 'integer',
+            'is_recovery_attempt' => 'boolean',
+            'is_demo_seed' => 'boolean',
             'payload' => 'array',
             'captured_at' => 'datetime',
         ];

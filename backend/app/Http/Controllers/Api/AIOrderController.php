@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Models\Product;
 use App\Services\GeminiService;
+use App\Support\Money;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -39,22 +41,44 @@ class AIOrderController extends Controller
         $currency = strtoupper($parsed['currency'] ?? 'USD');
         $rawItems = $parsed['items'] ?? [];
 
-        // Zero-Trust Server Recalculation Engine
+        // Zero-Trust Catalog Price Resolution & Server Recalculation Engine
+        $merchantProducts = Product::where('user_id', $request->user()->id)->get();
         $calculatedItems = [];
-        $subtotal = 0.00;
+        $subtotal = '0.00';
 
         foreach ($rawItems as $item) {
+            $rawName = trim($item['name'] ?? 'Item');
             $quantity = max(1, (int) ($item['quantity'] ?? 1));
-            $unitPrice = max(0.00, round((float) ($item['unit_price'] ?? 0.00), 2));
-            $lineTotal = round($quantity * $unitPrice, 2);
 
-            $subtotal += $lineTotal;
+            // Case-insensitive match against merchant's actual product catalog
+            $matchedProduct = $merchantProducts->first(function ($prod) use ($rawName) {
+                return mb_strtolower($prod->name) === mb_strtolower($rawName)
+                    || str_contains(mb_strtolower($rawName), mb_strtolower($prod->name))
+                    || str_contains(mb_strtolower($prod->name), mb_strtolower($rawName));
+            });
+
+            if ($matchedProduct) {
+                $unitPrice = Money::format($matchedProduct->unit_price);
+                $productId = $matchedProduct->id;
+                $catalogMatched = true;
+                $productName = $matchedProduct->name;
+            } else {
+                $unitPrice = Money::format($item['unit_price'] ?? '0.00');
+                $productId = null;
+                $catalogMatched = false;
+                $productName = $rawName;
+            }
+
+            $lineTotal = Money::mul($quantity, $unitPrice);
+            $subtotal = Money::add($subtotal, $lineTotal);
 
             $calculatedItems[] = [
-                'name' => trim($item['name'] ?? 'Item'),
+                'name' => $productName,
                 'quantity' => $quantity,
-                'unit_price' => number_format($unitPrice, 2, '.', ''),
-                'line_total' => number_format($lineTotal, 2, '.', ''),
+                'unit_price' => $unitPrice,
+                'line_total' => $lineTotal,
+                'product_id' => $productId,
+                'catalog_matched' => $catalogMatched,
             ];
         }
 
@@ -63,11 +87,12 @@ class AIOrderController extends Controller
         return response()->json([
             'raw_prompt' => $validated['prompt'],
             'items' => $calculatedItems,
-            'subtotal' => number_format($subtotal, 2, '.', ''),
-            'total' => number_format($total, 2, '.', ''),
+            'subtotal' => $subtotal,
+            'total' => $total,
             'currency' => $currency,
             'notes' => $parsed['notes'] ?? null,
             'ai_verified' => true,
+            'ai_source' => $parsed['ai_source'] ?? 'gemini-2.5-flash',
         ]);
     }
 
@@ -88,16 +113,16 @@ class AIOrderController extends Controller
 
         $currency = strtoupper($validated['currency'] ?? 'USD');
 
-        // Zero-Trust final calculation on server
-        $subtotal = 0.00;
+        // Zero-Trust final calculation on server using Money (BCMath)
+        $subtotal = '0.00';
         $orderItemsData = [];
 
         foreach ($validated['items'] as $item) {
             $qty = (int) $item['quantity'];
-            $unitPrice = round((float) $item['unit_price'], 2);
-            $lineTotal = round($qty * $unitPrice, 2);
+            $unitPrice = Money::format($item['unit_price']);
+            $lineTotal = Money::mul($qty, $unitPrice);
 
-            $subtotal += $lineTotal;
+            $subtotal = Money::add($subtotal, $lineTotal);
 
             $orderItemsData[] = [
                 'product_id' => $item['product_id'] ?? null,

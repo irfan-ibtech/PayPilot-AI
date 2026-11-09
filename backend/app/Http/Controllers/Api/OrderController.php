@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Support\Money;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -44,16 +45,16 @@ class OrderController extends Controller
 
         $currency = strtoupper($validated['currency'] ?? 'USD');
 
-        // Strictly calculate subtotal and total on the server
-        $subtotal = 0.00;
+        // Strictly calculate subtotal and total on the server using Money (BCMath)
+        $subtotal = '0.00';
         $orderItemsData = [];
 
         foreach ($validated['items'] as $item) {
             $qty = (int) $item['quantity'];
-            $unitPrice = round((float) $item['unit_price'], 2);
-            $lineTotal = round($qty * $unitPrice, 2);
+            $unitPrice = Money::format($item['unit_price']);
+            $lineTotal = Money::mul($qty, $unitPrice);
 
-            $subtotal += $lineTotal;
+            $subtotal = Money::add($subtotal, $lineTotal);
 
             $orderItemsData[] = [
                 'product_id' => $item['product_id'] ?? null,

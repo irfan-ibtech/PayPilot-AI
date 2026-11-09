@@ -14,7 +14,7 @@ class GeminiService
     public function __construct()
     {
         $this->apiKey = config('ai.gemini.api_key', '');
-        $this->model = config('ai.gemini.model', 'gemini-1.5-flash');
+        $this->model = config('ai.gemini.model', 'gemini-2.5-flash');
         $this->endpointTemplate = config(
             'ai.gemini.endpoint',
             'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}'
@@ -22,12 +22,25 @@ class GeminiService
     }
 
     /**
+     * Sanitize user prompt to neutralize prompt injection vectors.
+     */
+    public function sanitizePrompt(string $prompt): string
+    {
+        $sanitized = preg_replace('/(ignore\s+(all\s+)?previous\s+instructions|system\s*:\s*|```)/i', '', $prompt);
+        return trim($sanitized);
+    }
+
+    /**
      * Parse natural language merchant input into structured order items using Gemini.
      */
     public function parseNaturalLanguageOrder(string $prompt): array
     {
+        $cleanPrompt = $this->sanitizePrompt($prompt);
+
         if (empty($this->apiKey)) {
-            return $this->fallbackNaturalLanguageParser($prompt);
+            $fallback = $this->fallbackNaturalLanguageParser($cleanPrompt);
+            $fallback['ai_source'] = 'fallback_rules';
+            return $fallback;
         }
 
         $url = str_replace(
@@ -57,7 +70,7 @@ class GeminiService
                     'role' => 'user',
                     'parts' => [
                         [
-                            'text' => "Merchant order description: \"{$prompt}\"\n\n{$jsonSchemaPrompt}",
+                            'text' => "Merchant order description: \"{$cleanPrompt}\"\n\n{$jsonSchemaPrompt}",
                         ],
                     ],
                 ],
@@ -75,13 +88,17 @@ class GeminiService
             ],
         ];
 
-        $response = Http::withHeaders([
-            'Content-Type' => 'application/json',
-        ])->post($url, $payload);
+        $response = Http::timeout(config('ai.gemini.timeout', 15))
+            ->connectTimeout(config('ai.gemini.connect_timeout', 5))
+            ->withHeaders([
+                'Content-Type' => 'application/json',
+            ])->post($url, $payload);
 
         if ($response->failed()) {
             if ($response->status() === 400 || $response->status() === 403 || $response->status() === 429) {
-                return $this->fallbackNaturalLanguageParser($prompt, "(Fallback: Gemini API {$response->status()})");
+                $fallback = $this->fallbackNaturalLanguageParser($cleanPrompt, "(Fallback: Gemini API {$response->status()})");
+                $fallback['ai_source'] = 'fallback_rules';
+                return $fallback;
             }
             $errorData = $response->json();
             $errorMessage = $errorData['error']['message'] ?? $response->body();
@@ -99,10 +116,14 @@ class GeminiService
         $decoded = json_decode($cleanJson, true);
 
         if (! is_array($decoded) || ! isset($decoded['items'])) {
-            return $this->fallbackNaturalLanguageParser($prompt);
+            $fallback = $this->fallbackNaturalLanguageParser($cleanPrompt);
+            $fallback['ai_source'] = 'fallback_rules';
+            return $fallback;
         }
 
-        return $this->sanitizeExtractedOrder($decoded);
+        $sanitized = $this->sanitizeExtractedOrder($decoded);
+        $sanitized['ai_source'] = $this->model;
+        return $sanitized;
     }
 
     /**
@@ -164,9 +185,11 @@ CRITICAL RULES:
             ],
         ];
 
-        $response = Http::withHeaders([
-            'Content-Type' => 'application/json',
-        ])->post($url, $payload);
+        $response = Http::timeout(config('ai.gemini.timeout', 15))
+            ->connectTimeout(config('ai.gemini.connect_timeout', 5))
+            ->withHeaders([
+                'Content-Type' => 'application/json',
+            ])->post($url, $payload);
 
         if ($response->failed()) {
             if ($response->status() === 400 || $response->status() === 403 || $response->status() === 429) {
@@ -361,6 +384,127 @@ Your sales telemetry demonstrates robust transaction health with steady settleme
             'items' => $sanitizedItems,
             'notes' => $data['notes'] ?? null,
             'currency' => strtoupper($data['currency'] ?? 'USD'),
+        ];
+    }
+
+    /**
+     * Generate an AI Revenue Recovery diagnostic and personalized action plan.
+     */
+    public function generateRecoveryStrategy(array $recoveryContext): array
+    {
+        $order = $recoveryContext['order'];
+        $failureReason = $recoveryContext['failure_reason'] ?? 'Payment authorization failed';
+        $attemptCount = $recoveryContext['attempt_count'] ?? 1;
+        $amount = $recoveryContext['amount'] ?? '0.00';
+        $currency = $recoveryContext['currency'] ?? 'USD';
+        $itemsDescription = $recoveryContext['items_description'] ?? 'Merchant Products';
+        $hoursSinceDropoff = $recoveryContext['hours_since_dropoff'] ?? 2;
+
+        if (empty($this->apiKey)) {
+            return $this->fallbackRecoveryStrategy($recoveryContext);
+        }
+
+        $url = str_replace(
+            ['{model}', '{key}'],
+            [$this->model, $this->apiKey],
+            $this->endpointTemplate
+        );
+
+        $systemInstruction = "You are PayPilot AI's Revenue Recovery Agent. Your mission is to analyze failed checkout transactions and draft high-converting, personalized, non-intrusive recovery messaging for merchants. Never output ungrounded data. Output strict JSON only.";
+
+        $jsonSchemaPrompt = 'Output a JSON object with this exact structure:
+{
+  "ai_summary": "1-2 sentence executive explanation of failure",
+  "ai_reasoning": "Technical and behavioral analysis of why this drop-off occurred and why it is recoverable",
+  "ai_recommended_action": "Specific tactical action recommended for the merchant",
+  "customer_message_draft": "Personalized, warm email/SMS reminder message to customer with recovery link placeholder [RECOVERY_LINK]",
+  "ai_confidence": 85
+}';
+
+        $promptText = "Analyze this failed checkout:
+- Order Number: {$order['order_number']}
+- Amount: {$currency} {$amount}
+- Items: {$itemsDescription}
+- Drop-off Reason: {$failureReason}
+- Attempts Recorded: {$attemptCount}
+- Elapsed Time: {$hoursSinceDropoff} hours ago
+
+{$jsonSchemaPrompt}";
+
+        $payload = [
+            'contents' => [
+                [
+                    'role' => 'user',
+                    'parts' => [
+                        ['text' => $promptText],
+                    ],
+                ],
+            ],
+            'systemInstruction' => [
+                'parts' => [
+                    ['text' => $systemInstruction],
+                ],
+            ],
+            'generationConfig' => [
+                'temperature' => 0.2,
+                'response_mime_type' => 'application/json',
+            ],
+        ];
+
+        try {
+            $response = Http::timeout(config('ai.gemini.timeout', 15))
+                ->connectTimeout(config('ai.gemini.connect_timeout', 5))
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->post($url, $payload);
+
+            if ($response->failed()) {
+                return $this->fallbackRecoveryStrategy($recoveryContext);
+            }
+
+            $responseData = $response->json();
+            $rawText = $responseData['candidates'][0]['content']['parts'][0]['text'] ?? null;
+            if (! $rawText) {
+                return $this->fallbackRecoveryStrategy($recoveryContext);
+            }
+
+            $cleanJson = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($rawText));
+            $decoded = json_decode($cleanJson, true);
+
+            if (! is_array($decoded) || ! isset($decoded['ai_summary'])) {
+                return $this->fallbackRecoveryStrategy($recoveryContext);
+            }
+
+            return [
+                'ai_summary' => trim($decoded['ai_summary']),
+                'ai_reasoning' => trim($decoded['ai_reasoning'] ?? ''),
+                'ai_recommended_action' => trim($decoded['ai_recommended_action'] ?? 'Send 1-Click PayPal Paylink'),
+                'customer_message_draft' => trim($decoded['customer_message_draft'] ?? ''),
+                'ai_confidence' => max(1, min(100, (int) ($decoded['ai_confidence'] ?? 85))),
+                'ai_source' => $this->model,
+            ];
+        } catch (\Throwable $e) {
+            return $this->fallbackRecoveryStrategy($recoveryContext);
+        }
+    }
+
+    /**
+     * Fallback recovery strategy when API key is missing or request fails.
+     */
+    protected function fallbackRecoveryStrategy(array $recoveryContext): array
+    {
+        $order = $recoveryContext['order'];
+        $failureReason = $recoveryContext['failure_reason'] ?? 'Payment authorization pending';
+        $amount = $recoveryContext['amount'] ?? '0.00';
+        $currency = $recoveryContext['currency'] ?? 'USD';
+        $orderNumber = $order['order_number'] ?? 'Order';
+
+        return [
+            'ai_summary' => "Cart abandoned during checkout ({$failureReason}). High recovery potential via one-click PayPal checkout.",
+            'ai_reasoning' => "The customer initiated checkout for {$currency} {$amount} but encountered a transaction interruption ({$failureReason}). There are no repeated fraud signals. Re-engaging with a pre-authenticated PayPal link resolves payment friction.",
+            'ai_recommended_action' => 'Deploy verified 1-Click PayPal Recovery checkout link to customer',
+            'customer_message_draft' => "Hi there! We noticed your checkout for order #{$orderNumber} ({$currency} {$amount}) was not completed due to a temporary payment session interruption. Your reserved items are still saved for you. You can securely complete your purchase in 1 click via PayPal here: [RECOVERY_LINK]\n\nLet us know if you need any assistance!",
+            'ai_confidence' => 88,
+            'ai_source' => 'fallback_rules',
         ];
     }
 }

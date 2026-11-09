@@ -3,8 +3,10 @@
 namespace App\Services;
 
 use App\Models\Order;
+use App\Support\Money;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 class PayPalService
@@ -66,10 +68,12 @@ class PayPalService
     }
 
     /**
-     * Create an order in PayPal v2 Checkout API.
+     * Create an order in PayPal v2 Checkout API with upstream idempotency.
      */
-    public function createOrder(Order $order): array
+    public function createOrder(Order $order, ?string $requestId = null): array
     {
+        $formattedTotal = Money::format($order->total);
+
         if (config('paypal.mode') === 'mock' || (empty($this->clientId) && env('PAYPAL_ALLOW_SIMULATED', false))) {
             return [
                 'id' => 'SIMULATED-' . strtoupper(bin2hex(random_bytes(6))),
@@ -80,7 +84,7 @@ class PayPalService
                         'reference_id' => 'order_' . $order->id,
                         'amount' => [
                             'currency_code' => $order->currency,
-                            'value' => number_format((float) $order->total, 2, '.', ''),
+                            'value' => $formattedTotal,
                         ],
                     ],
                 ],
@@ -88,6 +92,7 @@ class PayPalService
         }
 
         $accessToken = $this->getAccessToken();
+        $requestId = $requestId ?: 'pp_req_' . $order->id . '_' . Str::uuid()->toString();
 
         $payload = [
             'intent' => 'CAPTURE',
@@ -98,7 +103,7 @@ class PayPalService
                     'custom_id' => (string) $order->id,
                     'amount' => [
                         'currency_code' => $order->currency,
-                        'value' => number_format((float) $order->total, 2, '.', ''),
+                        'value' => $formattedTotal,
                     ],
                 ],
             ],
@@ -112,6 +117,7 @@ class PayPalService
         $response = Http::withToken($accessToken)
             ->withHeaders([
                 'Content-Type' => 'application/json',
+                'PayPal-Request-Id' => $requestId,
             ])
             ->post("{$this->baseUrl}/v2/checkout/orders", $payload);
 
@@ -125,9 +131,9 @@ class PayPalService
     }
 
     /**
-     * Capture payment for an approved PayPal order.
+     * Capture payment for an approved PayPal order with upstream idempotency.
      */
-    public function capturePayment(string $paypalOrderId): array
+    public function capturePayment(string $paypalOrderId, ?string $requestId = null): array
     {
         if (str_starts_with($paypalOrderId, 'SIMULATED-')) {
             return [
@@ -153,10 +159,12 @@ class PayPalService
         }
 
         $accessToken = $this->getAccessToken();
+        $requestId = $requestId ?: 'pp_cap_' . $paypalOrderId . '_' . Str::uuid()->toString();
 
         $response = Http::withToken($accessToken)
             ->withHeaders([
                 'Content-Type' => 'application/json',
+                'PayPal-Request-Id' => $requestId,
             ])
             ->post("{$this->baseUrl}/v2/checkout/orders/{$paypalOrderId}/capture", (object) []);
 

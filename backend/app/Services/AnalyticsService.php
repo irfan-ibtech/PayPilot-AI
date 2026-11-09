@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Order;
 use App\Models\Payment;
+use App\Support\Money;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -22,14 +23,16 @@ class AnalyticsService
         $pendingOrders = (clone $ordersQuery)->where('status', 'PENDING')->count();
         $failedOrders = (clone $ordersQuery)->where('status', 'FAILED')->count();
 
-        // 2. Revenue metrics
-        $totalRevenue = (float) ((clone $ordersQuery)->where('status', 'PAID')->sum('total') ?? 0.0);
+        // 2. Revenue metrics using Money precision
+        $rawRevenueSum = (clone $ordersQuery)->where('status', 'PAID')->sum('total');
+        $totalRevenue = Money::format($rawRevenueSum);
         $conversionRate = $totalOrders > 0 ? round(($paidOrders / $totalOrders) * 100, 1) : 0.0;
-        $aov = $paidOrders > 0 ? round($totalRevenue / $paidOrders, 2) : 0.0;
+        $aov = $paidOrders > 0 ? Money::div($totalRevenue, $paidOrders) : '0.00';
 
         // 3. PayPal Payment Metrics
         $paymentsQuery = Payment::where('user_id', $userId);
-        $totalPayPalCapturedVolume = (float) ((clone $paymentsQuery)->where('status', 'COMPLETED')->sum('amount') ?? 0.0);
+        $rawCapturedSum = (clone $paymentsQuery)->where('status', 'COMPLETED')->sum('amount');
+        $totalPayPalCapturedVolume = Money::format($rawCapturedSum);
         $totalPayPalTransactions = (clone $paymentsQuery)->count();
 
         // 4. Top-Selling Products by Revenue
@@ -50,7 +53,7 @@ class AnalyticsService
                 return [
                     'product_name' => $item->product_name,
                     'total_units_sold' => (int) $item->total_units_sold,
-                    'total_revenue_generated' => round((float) $item->total_revenue_generated, 2),
+                    'total_revenue_generated' => (float) Money::format($item->total_revenue_generated),
                 ];
             })
             ->toArray();
@@ -78,27 +81,29 @@ class AnalyticsService
             $dayName = Carbon::now()->subDays($i)->format('D');
             $record = $dailyRecords->get($date);
 
+            $dailyTotal = $record ? Money::format($record->daily_total) : '0.00';
+
             $dailyVolume[] = [
                 'date' => $date,
                 'day' => $dayName,
                 'orders_count' => $record ? (int) $record->orders_count : 0,
-                'daily_total' => $record ? round((float) $record->daily_total, 2) : 0.0,
+                'daily_total' => (float) $dailyTotal,
             ];
         }
 
         return [
-            'total_revenue' => round($totalRevenue, 2),
-            'formatted_revenue' => '$' . number_format($totalRevenue, 2),
+            'total_revenue' => (float) $totalRevenue,
+            'formatted_revenue' => '$' . number_format((float) $totalRevenue, 2),
             'total_orders' => $totalOrders,
             'paid_orders' => $paidOrders,
             'pending_orders' => $pendingOrders,
             'failed_orders' => $failedOrders,
             'conversion_rate' => $conversionRate,
-            'average_order_value' => $aov,
-            'formatted_aov' => '$' . number_format($aov, 2),
+            'average_order_value' => (float) $aov,
+            'formatted_aov' => '$' . number_format((float) $aov, 2),
             'paypal_metrics' => [
-                'total_captured_volume' => round($totalPayPalCapturedVolume, 2),
-                'formatted_captured_volume' => '$' . number_format($totalPayPalCapturedVolume, 2),
+                'total_captured_volume' => (float) $totalPayPalCapturedVolume,
+                'formatted_captured_volume' => '$' . number_format((float) $totalPayPalCapturedVolume, 2),
                 'total_transactions' => $totalPayPalTransactions,
             ],
             'top_selling_products' => $topProducts,

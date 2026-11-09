@@ -20,6 +20,7 @@ class Order extends Model
         'currency',
         'status',
         'notes',
+        'is_demo_seed',
     ];
 
     protected function casts(): array
@@ -27,6 +28,7 @@ class Order extends Model
         return [
             'subtotal' => 'decimal:2',
             'total' => 'decimal:2',
+            'is_demo_seed' => 'boolean',
         ];
     }
 
