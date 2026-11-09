@@ -11,11 +11,13 @@ import {
   Percent,
   ArrowRight,
   Package,
+  RotateCcw,
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import api from '../services/api';
 import PayPalCheckoutModal from '../components/PayPalCheckoutModal';
 import type { Order } from '../types/order';
+import type { RecoveryMetrics } from '../types/recovery';
 
 interface TopProduct {
   product_name: string;
@@ -55,11 +57,13 @@ interface Recommendation {
 
 interface DashboardProps {
   onNavigateCopilot?: () => void;
+  onNavigateRecovery?: () => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ onNavigateCopilot }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ onNavigateCopilot, onNavigateRecovery }) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsOverview | null>(null);
+  const [recoveryMetrics, setRecoveryMetrics] = useState<RecoveryMetrics | null>(null);
   const [latestRec, setLatestRec] = useState<Recommendation | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -70,14 +74,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateCopilot }) => {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      const [analyticsRes, ordersRes] = await Promise.all([
+      const [analyticsRes, ordersRes, recoveryRes] = await Promise.all([
         api.get('/analytics/overview'),
         api.get('/orders'),
+        api.get('/recovery/metrics').catch(() => ({ data: { data: null } })),
       ]);
 
       setAnalytics(analyticsRes.data.metrics);
       setLatestRec(analyticsRes.data.latest_recommendation);
       setOrders(ordersRes.data.data || []);
+      setRecoveryMetrics(recoveryRes.data.data || null);
     } catch (err) {
       console.error('Failed to load dashboard data', err);
     } finally {
@@ -154,6 +160,45 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateCopilot }) => {
                 className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-blue-500/20 transition"
               >
                 <span>Consult Copilot</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* AI Revenue Recovery Pipeline Banner */}
+      {recoveryMetrics && (recoveryMetrics.total_opportunities > 0 || recoveryMetrics.recovered_count > 0) && (
+        <div className="p-5 rounded-3xl bg-gradient-to-r from-purple-950/60 via-slate-900 to-indigo-950/50 border border-purple-800/60 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="h-10 w-10 rounded-2xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0 mt-0.5">
+              <RotateCcw className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs uppercase font-bold tracking-wider text-purple-400">
+                  AI Revenue Recovery Pipeline
+                </span>
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-800 font-semibold">
+                  {recoveryMetrics.pending_review} Actionable Drop-offs
+                </span>
+              </div>
+              <h3 className="text-base font-semibold text-white mt-0.5">
+                {recoveryMetrics.formatted_potential_revenue} Recoverable Revenue Identified
+              </h3>
+              <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                Autonomous recovery agent detected uncaptured drop-offs. Merchants review AI diagnosis and launch approval-controlled 1-click PayPal recovery.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-end md:self-center shrink-0">
+            {onNavigateRecovery && (
+              <button
+                onClick={onNavigateRecovery}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-purple-500/20 transition"
+              >
+                <span>Open Recovery Agent</span>
                 <ArrowRight className="h-3.5 w-3.5" />
               </button>
             )}
@@ -319,7 +364,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateCopilot }) => {
                 {orders.map((ord) => (
                   <tr key={ord.id} className="hover:bg-slate-800/40 transition">
                     <td className="py-3 px-4 font-mono font-medium text-white">
-                      {ord.order_number}
+                      <div className="flex items-center gap-2">
+                        <span>{ord.order_number}</span>
+                        {(ord as any).is_demo_seed ? (
+                          <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+                            Demo Seed
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800">
+                            Live Sandbox
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3 px-4 text-xs text-slate-400">
                       {new Date(ord.created_at).toLocaleDateString()}

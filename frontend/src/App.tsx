@@ -5,6 +5,7 @@ import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import OrderAssistant from './pages/OrderAssistant';
 import Copilot from './pages/Copilot';
+import RevenueRecovery from './pages/RevenueRecovery';
 import Login from './pages/Login';
 import Register from './pages/Register';
 
@@ -39,7 +40,13 @@ const MainLayout: React.FC = () => {
         <Sidebar currentTab={currentTab} onSelectTab={setCurrentTab} />
         <main className="flex-1 p-8 overflow-y-auto max-w-7xl">
           {currentTab === 'dashboard' && (
-            <Dashboard onNavigateCopilot={() => setCurrentTab('copilot')} />
+            <Dashboard
+              onNavigateCopilot={() => setCurrentTab('copilot')}
+              onNavigateRecovery={() => setCurrentTab('recovery')}
+            />
+          )}
+          {currentTab === 'recovery' && (
+            <RevenueRecovery />
           )}
           {currentTab === 'assistant' && (
             <OrderAssistant onNavigateDashboard={() => setCurrentTab('dashboard')} />

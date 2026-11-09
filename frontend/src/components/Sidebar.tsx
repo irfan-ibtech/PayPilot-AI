@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, ShoppingCart, Bot, Package, CreditCard } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Bot, Package, CreditCard, RotateCcw } from 'lucide-react';
 
 interface SidebarProps {
   currentTab: string;
@@ -9,6 +9,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab }) => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'recovery', label: 'Revenue Recovery', icon: RotateCcw },
     { id: 'assistant', label: 'Order Assistant', icon: ShoppingCart },
     { id: 'copilot', label: 'AI Copilot', icon: Bot },
     { id: 'products', label: 'Products', icon: Package },

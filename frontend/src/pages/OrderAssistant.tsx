@@ -17,10 +17,12 @@ import PayPalCheckoutModal from '../components/PayPalCheckoutModal';
 import type { Order, PaymentRecord } from '../types/order';
 
 interface DraftItem {
+  product_id?: number | null;
   name: string;
   quantity: number;
   unit_price: number | string;
   line_total: number | string;
+  catalog_matched?: boolean;
 }
 
 interface AIDraftOrder {
@@ -31,6 +33,7 @@ interface AIDraftOrder {
   currency: string;
   notes: string | null;
   ai_verified: boolean;
+  ai_source?: string;
 }
 
 interface Product {
@@ -407,12 +410,20 @@ export const OrderAssistant: React.FC<OrderAssistantProps> = ({ onNavigateDashbo
                 {draftOrder.items.map((item, idx) => (
                   <tr key={idx} className="hover:bg-slate-800/30 transition">
                     <td className="py-3 px-4">
-                      <input
-                        type="text"
-                        value={item.name}
-                        onChange={(e) => handleItemChange(idx, 'name', e.target.value)}
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-blue-500"
-                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={item.name}
+                          onChange={(e) => handleItemChange(idx, 'name', e.target.value)}
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-blue-500"
+                        />
+                        {item.catalog_matched && (
+                          <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1 shadow-sm">
+                            <ShieldCheck className="h-3 w-3 text-emerald-400" />
+                            <span>Catalog Verified</span>
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3 px-4">
                       <input
