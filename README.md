@@ -1,5 +1,5 @@
 # PayPilot AI 🚀
-### Enterprise AI Revenue Recovery, Autonomous Commerce & PayPal v2 Settlement Platform
+### Enterprise AI Revenue Recovery, Human-Authorized Commerce & PayPal v2 Settlement Platform
 
 [![PayPal REST API](https://img.shields.io/badge/PayPal-REST%20API%20v2%20(Sandbox)-003087?style=for-the-badge&logo=paypal&logoColor=white)](https://developer.paypal.com/)
 [![Google Gemini](https://img.shields.io/badge/Google%20Gemini-3.1%20Flash%20Lite-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
@@ -16,15 +16,15 @@
 
 ## 📌 Executive Summary
 
-Every year, global e-commerce merchants lose **over \$18 billion to checkout abandonment, transient payment authorization drops, and unrecovered cart friction**. Traditional cart recovery relies on generic spam emails, while store payment workflows operate disconnected from real-time financial telemetry.
+Every year, global e-commerce merchants lose **over \$18 billion to checkout drop-offs, transient payment authorization interruptions, and unrecovered cart friction**. Traditional cart recovery relies on generic spam emails, while store payment workflows operate disconnected from real-time financial telemetry.
 
-**PayPilot AI** revolutionizes SMB and enterprise commerce by deploying an **Autonomous, Approval-Governed AI Revenue Recovery Agent** coupled with an end-to-end, zero-trust commerce operating system:
+**PayPilot AI** modernizes SMB and enterprise commerce by deploying a **Human-Authorized AI Revenue Recovery Agent** coupled with an end-to-end, zero-trust commerce operating system:
 
 1. **AI Natural Language Order Assistant:** Parse messy merchant quotes and verbal descriptions into structured line items using Google Gemini (configurable model, defaults to `gemini-3.1-flash-lite`).
 2. **Catalog-Enforced Zero-Trust Pricing:** LLM mathematical output is never trusted. Prices are resolved strictly against merchant database catalogs, and all subtotals/totals are calculated via BCMath arbitrary precision (`scale = 2`).
 3. **Instant PayPal REST API v2 Checkout:** Native integration with PayPal Orders v2 with multi-attempt ledger history and upstream `PayPal-Request-Id` idempotency.
 4. **Pessimistic Concurrency & Anti-Tampering Engine:** Database transactions lock rows (`lockForUpdate()`) to prevent race conditions across webhooks, user retries, and AI automated captures. Captured values and currencies are mathematically verified before settlement.
-5. **AI Revenue Recovery Agent & Scoring Engine:** Continuously scans checkout drop-offs, calculates deterministic recovery scores (0–100), performs root-cause diagnostics, drafts personalized outreach copy, and launches 1-click PayPal recovery checkouts under strict merchant approval.
+5. **Human-Authorized AI Revenue Recovery Agent:** Scans unrecovered drop-offs (orders with failed payment attempts, explicit abandonment, or age > 15 minutes), calculates explainable heuristic priority scores (10–98), performs root-cause diagnostics, drafts customer outreach copy, and prepares 1-click PayPal recovery checkouts under strict merchant approval.
 6. **Deterministic Financial Analytics & Gemini Copilot:** Ingests settled telemetry into a deterministic analytics engine to provide ground-truth CFO dashboards and executive recommendations.
 
 ---
@@ -47,13 +47,13 @@ flowchart TD
         PAY_CTRL["PayPal Verification Engine (Pessimistic Lock)"]
         REC_AGENT["AI Revenue Recovery Agent Service"]
         ANALYTICS["Deterministic Analytics Service (BCMath)"]
-        GEMINI_SVC["Gemini 2.5 Flash Service (Timeouts & Sanitization)"]
+        GEMINI_SVC["Google Gemini Service (gemini-3.1-flash-lite)"]
         MONEY["BCMath Money Precision Helper"]
     end
 
     subgraph ExternalAPIs ["External Cloud Infrastructure"]
         PAYPAL["PayPal REST API v2 (Orders & Captures)"]
-        GEMINI["Google Gemini API (gemini-2.5-flash)"]
+        GEMINI["Google Gemini API (gemini-3.1-flash-lite)"]
     end
 
     subgraph Database ["Persistent Database (MySQL 8.0)"]
@@ -97,7 +97,7 @@ sequenceDiagram
     actor Merchant as Merchant
     participant React as Recovery Workspace
     participant Agent as RecoveryAgentService
-    participant Gemini as Gemini 2.5 Flash
+    participant Gemini as Gemini 3.1 Flash Lite
     participant PayPal as PayPal Orders API v2
     participant DB as Database (Pessimistic Lock)
 
@@ -105,7 +105,7 @@ sequenceDiagram
     React->>Agent: POST /api/recovery/scan
     Agent->>DB: Queries unrecovered PENDING / FAILED orders
     loop For Each Drop-off
-        Agent->>Agent: Evaluates recency, cart size, attempt history -> Score (0-100)
+        Agent->>Agent: Evaluates recency, cart size, attempt history -> Score (10-98)
         Agent->>Gemini: Diagnostic prompt (root cause, strategy, copy draft)
         Gemini-->>Agent: Structured JSON diagnostic & message draft
         Agent->>DB: Stores RecoveryOpportunity (status: PENDING)
@@ -125,7 +125,7 @@ sequenceDiagram
     Merchant->>PayPal: Authorizes payment in PayPal Sandbox
     PayPal-->>React: Captured authorization token
     React->>Agent: POST /api/payments/paypal/capture
-    Note over Agent,DB: Pessimistic Lock (lockForUpdate) on Order & Payment<br/>Cryptographic BCMath amount & currency verification
+    Note over Agent,DB: Pessimistic Lock (lockForUpdate) on Order & Payment<br/>Server-side PayPal capture status, amount & currency verification
     Agent->>DB: DB Transaction: Payment (COMPLETED), Order (PAID)
     Agent->>DB: Auto-Reconciles RecoveryOpportunity: status = RECOVERED
     Agent-->>React: Confirmed Settlement Response
@@ -170,11 +170,11 @@ When extracting orders from natural language, `AIOrderController::parse()` match
 - **Revenue Recovery Workspace (`/recovery`):**
   - KPI Ribbon: Recoverable Revenue, Captured Recoveries, Pending Review, Recovery Win Rate.
   - Split-pane interface: Pipeline Queue on the left, Diagnostic & Inspector on the right.
-  - Deterministic 0–100 scoring engine with color-coded priority badges (`critical`, `high`, `medium`, `low`).
-  - AI Root Cause Analysis & Behavioral Reasoning.
+  - Explainable heuristic scoring engine (10–98) with priority badges (`high`, `medium`, `standard`).
+  - AI Root Cause Analysis & Behavioral Reasoning via Gemini.
   - Zero-Trust Customer Message Draft with 1-click clipboard copy.
-  - Approval state machine (`PENDING` -> `APPROVED` -> `IN_FLIGHT` -> `RECOVERED` / `REJECTED`).
-  - Immutable audit trail tracking every actor and state transition.
+  - Human-in-the-loop approval state machine (`PENDING` -> `APPROVED` -> `IN_FLIGHT` -> `RECOVERED` / `REJECTED`).
+  - Application-level append-only payment event log tracking every actor and state transition.
 - **AI Order Assistant (`/assistant`):**
   - Natural-language quote parsing into structured baskets.
   - Catalog price verification tags.
@@ -288,7 +288,7 @@ cd PayPilot-AI
 
    # Google Gemini API Key
    GEMINI_API_KEY=your_gemini_api_key
-   GEMINI_MODEL=gemini-2.5-flash
+   GEMINI_MODEL=gemini-3.1-flash-lite
    ```
 
 4. Run migrations and database seeder:
@@ -332,10 +332,30 @@ cd PayPilot-AI
 ## 📹 Hackathon & Devpost Submission Details
 
 - **Hackathon:** PayPal AI Hackathon 2026
-- **Category:** Autonomous AI Agents & Intelligent Merchant Payment Solutions
+- **Category:** AI Agents & Intelligent Merchant Payment Solutions
 - **Lead Architect & Engineer:** Muhammad Irfan Bashir ([@irfan-ibtech](https://github.com/irfan-ibtech))
 - **Audit Documentation:** [AUDIT_REPORT.md](AUDIT_REPORT.md)
 - **Status Dashboard:** [PROJECT_STATUS.md](PROJECT_STATUS.md)
+
+---
+
+## ⚖️ Hackathon Evaluation Readiness & Outstanding Production Disclosures
+
+PayPilot AI is **Hackathon Evaluation-Ready** against the authentic PayPal Sandbox environment (`api-m.sandbox.paypal.com`).
+
+### Verified Sandbox Capabilities:
+- Live OAuth2 token issuance against PayPal Sandbox.
+- Live PayPal v2 Order Creation (`POST /v2/checkout/orders`) with upstream idempotency (`PayPal-Request-Id`).
+- Real-time order inquiry (`GET /v2/checkout/orders/{id}`) and pre-approval capture rejection (HTTP 422 `ORDER_NOT_APPROVED`).
+- Dedicated recovery checkout session generation with strict merchant approval gates.
+- Strict accounting segregation: seeded demo figures and local simulations are never counted towards genuine PayPal captured volume.
+
+### Outstanding Requirements for Live-Money Production Deployment:
+1. **Commercial PayPal Production Credentials:** Merchant onboarding and approval for live REST API v2 (`PAYPAL_MODE=live`).
+2. **Interactive Buyer Approval:** End-user authorization on `sandbox.paypal.com` or live PayPal requires human buyer login with personal account credentials.
+3. **Webhook Verification:** Implementation of PayPal webhook signature validation (`PAYPAL-TRANSMISSION-SIG`) for out-of-band capture and dispute events.
+4. **Outreach Messaging Dispatch:** Integration with external SMS/Email providers (e.g. Twilio, Postmark) to transmit merchant-approved recovery copy.
+5. **PCI-DSS Compliance:** Merchant SAQ-A compliance attestation for production payment acceptance.
 
 ---
 

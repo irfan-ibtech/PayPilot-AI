@@ -110,16 +110,16 @@ The following report classifies these findings by severity, details exploit/fail
 
 ---
 
-### 6. [SEC-06] Gemini 1.5 Flash Model Default & Missing Timeout Boundaries
+### 6. [SEC-06] Gemini Model Default & Missing Timeout Boundaries
 - **Severity:** `MEDIUM`
 - **Component:** `config/ai.php` (L6), `GeminiService.php` (L78-81)
 - **Vulnerability Description:**
-  `config/ai.php` defaults to `gemini-1.5-flash`. The newer `gemini-2.5-flash` model offers improved reasoning, lower latency, and superior JSON structured schema compliance. Additionally, HTTP requests to the Gemini endpoint lack explicit HTTP connection and execution timeout boundaries (`Http::timeout()`), exposing backend workers to hung connections if upstream Google services experience network degradation.
+  `config/ai.php` defaults to legacy models. The newer `gemini-3.1-flash-lite` model offers improved reasoning, lower latency, and strict JSON structured schema compliance. Additionally, HTTP requests to the Gemini endpoint lack explicit HTTP connection and execution timeout boundaries (`Http::timeout()`), exposing backend workers to hung connections if upstream Google services experience network degradation.
 - **Exploit / Failure Scenario:**
   1. Under intermittent network latency or Gemini rate-limiting, PHP worker processes become blocked indefinitely waiting for API responses, exhausting PHP-FPM or Artisan server worker pools.
   2. Fallback logic is bypassed when the connection hangs rather than quickly falling back to the local regex financial parser.
 - **Architectural Fix:**
-  Update default configuration in `config/ai.php` and `GeminiService.php` to `gemini-2.5-flash`. Configure strict `timeout(15)` and `connectTimeout(5)` on all outbound HTTP requests to the Gemini API. Add prompt sanitization to strip injection markers.
+  Update default configuration in `config/ai.php` and `GeminiService.php` to `gemini-3.1-flash-lite`. Configure strict `timeout(15)` and `connectTimeout(5)` on all outbound HTTP requests to the Gemini API. Add prompt sanitization to strip injection markers.
 
 ---
 
@@ -144,7 +144,7 @@ The following report classifies these findings by severity, details exploit/fail
    - Implement pessimistic locking (`lockForUpdate`) on `Order` and `Payment` during capture.
    - Inject `PayPal-Request-Id` in `PayPalService`.
    - Enforce catalog price resolution in `AIOrderController::parse()`.
-   - Upgrade Gemini configuration to `gemini-2.5-flash` with timeouts.
+   - Upgrade Gemini configuration to `gemini-3.1-flash-lite` with timeouts.
 
 2. **Phase 3 — AI Revenue Recovery Agent:**
    - Create `recovery_opportunities` schema and model.

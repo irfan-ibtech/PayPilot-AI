@@ -289,7 +289,7 @@ export const OrderAssistant: React.FC<OrderAssistantProps> = ({ onNavigateDashbo
             <span>Order #{activeOrder.order_number} Captured & Paid!</span>
           </div>
           <p className="text-xs text-slate-300">
-            Payment successfully captured in PayPal Sandbox with cryptographic server-side validation.
+            Payment successfully confirmed in PayPal Sandbox with server-side PayPal capture status, amount and currency verification.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs font-mono">
             <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">

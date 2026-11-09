@@ -167,11 +167,11 @@ export const TransactionLedger: React.FC = () => {
             </span>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-1 font-mono">
               <ShieldCheck className="h-3 w-3" />
-              Cryptographic Verification
+              Server-Side Capture Verification
             </span>
           </div>
           <p className="text-sm text-slate-400 mt-0.5">
-            Immutable settlement ledger capturing every PayPal v2 authorization, capture token, idempotency key, and failure audit log.
+            Application-level settlement ledger capturing every PayPal v2 authorization, capture token, idempotency key, and failure audit log.
           </p>
         </div>
 
@@ -504,7 +504,7 @@ export const TransactionLedger: React.FC = () => {
                 {selectedTx.status === 'COMPLETED' ? (
                   <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-800 text-emerald-300 text-xs flex items-center gap-2.5">
                     <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                    <span>Payment verified cryptographically via PayPal v2 Capture API.</span>
+                    <span>Payment verified and confirmed via PayPal v2 Capture API.</span>
                   </div>
                 ) : selectedTx.status === 'FAILED' ? (
                   <div className="p-3.5 rounded-xl bg-rose-950/40 border border-rose-800 text-rose-300 text-xs space-y-1">
@@ -523,7 +523,7 @@ export const TransactionLedger: React.FC = () => {
                   </div>
                 )}
 
-                {/* Cryptographic Key Tokens */}
+                {/* PayPal Key Tokens */}
                 <div className="space-y-2">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                     PayPal API Tokens & Idempotency

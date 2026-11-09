@@ -130,7 +130,7 @@ class AIOrderController extends Controller
             'currency' => $currency,
             'notes' => $parsed['notes'] ?? null,
             'ai_verified' => true,
-            'ai_source' => $parsed['ai_source'] ?? 'gemini-2.5-flash',
+            'ai_source' => $parsed['ai_source'] ?? config('ai.gemini_model', 'gemini-3.1-flash-lite'),
         ]);
     }
 

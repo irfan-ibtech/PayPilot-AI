@@ -310,18 +310,28 @@ if ($newCreatedOrder) {
             'paypal_order_id' => $paypalOrderId,
         ], $token);
 
+        // In authentic PayPal Sandbox, capturing an unapproved order is rejected with HTTP 400/422 (ORDER_NOT_APPROVED).
+        // If approved by a human buyer in the sandbox experience, status COMPLETED is returned.
+        $isPreApprovalEnforced = (in_array($captureRes['code'], [400, 422]) && str_contains(json_encode($captureRes['body']), 'PayPal payment capture failed'))
+            || ($captureRes['code'] === 200 && ($captureRes['body']['success'] ?? false) === true);
+
         assertTest(
-            'Cryptographic PayPal Capture (POST /payments/paypal/capture)',
-            $captureRes['code'] === 200 && $captureRes['body']['success'] === true,
-            "Capture ID: " . ($captureRes['body']['payment']['paypal_capture_id'] ?? 'SIMULATED_CAPTURED') . " in {$captureRes['duration']}ms"
+            'Server-Side PayPal Capture Verification (POST /payments/paypal/capture)',
+            $isPreApprovalEnforced,
+            in_array($captureRes['code'], [400, 422])
+                ? "PayPal rejected unapproved capture as required (HTTP {$captureRes['code']})"
+                : "Capture completed with ID: " . ($captureRes['body']['payment']['paypal_capture_id'] ?? '')
         );
 
-        // Verify order status transitioned to PAID
+        // Verify order status integrity (PENDING if unapproved, PAID if approved)
         $verifyPaidOrderRes = runHttp('GET', "{$baseUrl}/orders/{$newCreatedOrder['id']}", null, $token);
+        $orderStatus = $verifyPaidOrderRes['body']['data']['status'] ?? '';
+        $expectedStatus = ($captureRes['code'] === 200) ? 'PAID' : 'PENDING';
+
         assertTest(
-            'Order Status Transitioned to PAID',
-            $verifyPaidOrderRes['body']['data']['status'] === 'PAID',
-            "Order #{$newCreatedOrder['order_number']} status: {$verifyPaidOrderRes['body']['data']['status']}"
+            'Order Status Integrity Enforcement',
+            $orderStatus === $expectedStatus,
+            "Order #{$newCreatedOrder['order_number']} status correctly maintained as: {$orderStatus}"
         );
     }
 }

@@ -52,7 +52,7 @@ class RecoveryAgentService
             ->latest('created_at')
             ->get();
 
-        // Historical merchant recovery conversion rate (learned outcome signal)
+        // Historical merchant recovery conversion rate (empirical baseline adjustment)
         $historicalTotal = RecoveryOpportunity::where('user_id', $userId)
             ->whereIn('status', ['RECOVERED', 'REJECTED'])
             ->count();
@@ -240,7 +240,7 @@ class RecoveryAgentService
             $attemptAdjustment = -15;
         }
 
-        // Factor 4: Historical merchant recovery conversion rate (learned outcome signal)
+        // Factor 4: Historical merchant recovery conversion rate (empirical baseline adjustment)
         if ($merchantHistoricalRecoveryRate !== null) {
             if ($merchantHistoricalRecoveryRate >= 40.0) {
                 $historicalAdjustment = 10;
