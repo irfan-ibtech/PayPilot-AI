@@ -169,7 +169,7 @@ class RecoveryAgentService
             throw new Exception('Unauthorized opportunity access.');
         }
 
-        if (! in_array($opportunity->status, ['PENDING', 'REJECTED'])) {
+        if (! in_array($opportunity->status, ['PENDING', 'APPROVED', 'REJECTED'])) {
             throw new Exception("Opportunity cannot be approved from status '{$opportunity->status}'.");
         }
 
