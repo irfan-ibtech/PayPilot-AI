@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AIOrderController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentController;
@@ -29,6 +30,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/orders', [OrderController::class, 'index']);
     Route::post('/orders', [OrderController::class, 'store']);
     Route::get('/orders/{id}', [OrderController::class, 'show']);
+
+    // AI Natural Language Order Extraction & Zero-Trust Engine
+    Route::post('/ai/parse-order', [AIOrderController::class, 'parse']);
+    Route::post('/ai/confirm-order', [AIOrderController::class, 'confirmAndCreate']);
 
     // PayPal Verification & Capture Engine
     Route::get('/payments/paypal/client-id', [PaymentController::class, 'getPayPalClientId']);

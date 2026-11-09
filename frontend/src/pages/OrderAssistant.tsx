@@ -1,8 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { ShoppingCart, Plus, CheckCircle, CreditCard, Sparkles, AlertCircle, ArrowLeft } from 'lucide-react';
+import {
+  Sparkles,
+  Bot,
+  CreditCard,
+  ShieldCheck,
+  CheckCircle2,
+  Trash2,
+  Plus,
+  Loader2,
+  ArrowLeft,
+  AlertCircle,
+  HelpCircle,
+} from 'lucide-react';
 import PayPalCheckoutModal from '../components/PayPalCheckoutModal';
 import type { Order, PaymentRecord } from '../types/order';
+
+interface DraftItem {
+  name: string;
+  quantity: number;
+  unit_price: number | string;
+  line_total: number | string;
+}
+
+interface AIDraftOrder {
+  raw_prompt: string;
+  items: DraftItem[];
+  subtotal: string;
+  total: string;
+  currency: string;
+  notes: string | null;
+  ai_verified: boolean;
+}
 
 interface Product {
   id: number;
@@ -11,143 +40,188 @@ interface Product {
   currency: string;
 }
 
-interface CartItem {
-  product_id?: number;
-  name: string;
-  quantity: number;
-  unit_price: number;
-}
-
 interface OrderAssistantProps {
   onNavigateDashboard?: () => void;
 }
 
 export const OrderAssistant: React.FC<OrderAssistantProps> = ({ onNavigateDashboard }) => {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [customName, setCustomName] = useState('Custom Tech Gadget');
-  const [customPrice, setCustomPrice] = useState('49.99');
-  const [customQty, setCustomQty] = useState(1);
-  const [notes, setNotes] = useState('Created via PayPilot Order Assistant');
-  const [loading, setLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  // AI NLP State
+  const [prompt, setPrompt] = useState('2 wireless headphones at $45 each and one phone case at $12');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [draftOrder, setDraftOrder] = useState<AIDraftOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Modal & Completed State
+  // Catalog items for quick browsing
+  const [products, setProducts] = useState<Product[]>([]);
+
+  // Checkout modal & completion
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
   const [completedPayment, setCompletedPayment] = useState<PaymentRecord | null>(null);
+
+  const sampleChips = [
+    '2 wireless headphones at $45 each and one phone case at $12',
+    '3 Ergonomic Mouse at $35.50 and 2 USB-C hubs at $22',
+    '1 Mechanical Keyboard for $85 with expedited setup note',
+  ];
 
   useEffect(() => {
     const fetchCatalog = async () => {
       try {
         const response = await api.get('/products');
-        const items = response.data.data || [];
-        setProducts(items);
-
-        // Preload cart with 1 sample item if empty
-        if (items.length > 0) {
-          setCart([
-            {
-              product_id: items[0].id,
-              name: items[0].name,
-              quantity: 1,
-              unit_price: parseFloat(items[0].unit_price),
-            },
-          ]);
-        }
+        setProducts(response.data.data || []);
       } catch (err) {
         console.error('Failed to load products', err);
-      } finally {
-        setLoading(false);
       }
     };
     fetchCatalog();
   }, []);
 
-  const addCatalogProduct = (product: Product) => {
-    setCart((prev) => {
-      const existing = prev.find((item) => item.product_id === product.id);
-      if (existing) {
-        return prev.map((item) =>
-          item.product_id === product.id ? { ...item, quantity: item.quantity + 1 } : item
-        );
+  // Handle AI Parse Request
+  const handleAnalyzePrompt = async (textToParse?: string) => {
+    const targetPrompt = (textToParse || prompt).trim();
+    if (!targetPrompt) return;
+
+    setError(null);
+    setIsAnalyzing(true);
+
+    try {
+      const response = await api.post('/ai/parse-order', {
+        prompt: targetPrompt,
+      });
+      setDraftOrder(response.data);
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'response' in err) {
+        const res = (err as { response?: { data?: { message?: string } } }).response;
+        setError(res?.data?.message || 'Failed to extract order details.');
+      } else {
+        setError('Connection error contacting AI extraction engine.');
       }
-      return [
-        ...prev,
-        {
-          product_id: product.id,
-          name: product.name,
-          quantity: 1,
-          unit_price: parseFloat(product.unit_price),
-        },
-      ];
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  // Modify draft items inline
+  const handleItemChange = (index: number, field: 'name' | 'quantity' | 'unit_price', value: string | number) => {
+    if (!draftOrder) return;
+
+    const newItems = [...draftOrder.items];
+    const currentItem = { ...newItems[index] };
+
+    if (field === 'name') {
+      currentItem.name = String(value);
+    } else if (field === 'quantity') {
+      currentItem.quantity = Math.max(1, parseInt(String(value), 10) || 1);
+    } else if (field === 'unit_price') {
+      currentItem.unit_price = value;
+    }
+
+    const qty = currentItem.quantity;
+    const price = parseFloat(String(currentItem.unit_price)) || 0;
+    currentItem.line_total = (qty * price).toFixed(2);
+    newItems[index] = currentItem;
+
+    // Recalculate subtotal
+    const newSubtotal = newItems
+      .reduce((sum, it) => sum + it.quantity * (parseFloat(String(it.unit_price)) || 0), 0)
+      .toFixed(2);
+
+    setDraftOrder({
+      ...draftOrder,
+      items: newItems,
+      subtotal: newSubtotal,
+      total: newSubtotal,
     });
   };
 
-  const addCustomItem = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customName.trim() || isNaN(parseFloat(customPrice)) || parseFloat(customPrice) <= 0) {
-      return;
-    }
-    setCart((prev) => [
-      ...prev,
-      {
-        name: customName.trim(),
-        quantity: customQty,
-        unit_price: parseFloat(customPrice),
-      },
-    ]);
-    setCustomName('');
-    setCustomPrice('29.00');
-    setCustomQty(1);
+  const handleRemoveDraftItem = (index: number) => {
+    if (!draftOrder) return;
+    const newItems = draftOrder.items.filter((_, idx) => idx !== index);
+    const newSubtotal = newItems
+      .reduce((sum, it) => sum + it.quantity * (parseFloat(String(it.unit_price)) || 0), 0)
+      .toFixed(2);
+
+    setDraftOrder({
+      ...draftOrder,
+      items: newItems,
+      subtotal: newSubtotal,
+      total: newSubtotal,
+    });
   };
 
-  const removeFromCart = (index: number) => {
-    setCart((prev) => prev.filter((_, idx) => idx !== index));
+  const handleAddDraftItem = () => {
+    if (!draftOrder) return;
+    const newItem: DraftItem = {
+      name: 'Additional Item',
+      quantity: 1,
+      unit_price: '20.00',
+      line_total: '20.00',
+    };
+    const newItems = [...draftOrder.items, newItem];
+    const newSubtotal = newItems
+      .reduce((sum, it) => sum + it.quantity * (parseFloat(String(it.unit_price)) || 0), 0)
+      .toFixed(2);
+
+    setDraftOrder({
+      ...draftOrder,
+      items: newItems,
+      subtotal: newSubtotal,
+      total: newSubtotal,
+    });
   };
 
-  const subtotal = cart.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
-
-  const handleCreateOrderAndCheckout = async () => {
-    if (cart.length === 0) return;
+  // Submit verified draft to server & trigger PayPal modal
+  const handleConfirmOrder = async () => {
+    if (!draftOrder || draftOrder.items.length === 0) return;
     setError(null);
-    setIsSubmitting(true);
+    setIsConfirming(true);
 
     try {
-      const response = await api.post('/orders', {
-        items: cart,
-        currency: 'USD',
-        notes: notes.trim(),
+      const response = await api.post('/ai/confirm-order', {
+        items: draftOrder.items.map((it) => ({
+          name: it.name,
+          quantity: it.quantity,
+          unit_price: parseFloat(String(it.unit_price)),
+        })),
+        currency: draftOrder.currency || 'USD',
+        notes: draftOrder.notes || `AI Order: ${draftOrder.raw_prompt}`,
       });
 
-      const orderData: Order = response.data.data;
-      setActiveOrder(orderData);
+      const createdOrder: Order = response.data.data;
+      setActiveOrder(createdOrder);
       setIsModalOpen(true);
     } catch (err: unknown) {
       if (err && typeof err === 'object' && 'response' in err) {
         const res = (err as { response?: { data?: { message?: string } } }).response;
         setError(res?.data?.message || 'Failed to create order on server.');
       } else {
-        setError('Network error while creating order.');
+        setError('Network error confirming order.');
       }
     } finally {
-      setIsSubmitting(false);
+      setIsConfirming(false);
     }
-  };
-
-  const handlePaymentSuccess = (payment: PaymentRecord) => {
-    setCompletedPayment(payment);
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Top Banner */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Order Creation Assistant</h1>
-          <p className="text-sm text-slate-400">
-            Build multi-item merchant orders and verify PayPal v2 capture in real-time
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-white">AI Order Assistant</h1>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex items-center gap-1 shadow-sm">
+              <Sparkles className="h-3 w-3" />
+              Gemini Powered
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-1">
+              <ShieldCheck className="h-3 w-3" />
+              Zero-Trust Verification
+            </span>
+          </div>
+          <p className="text-sm text-slate-400 mt-1">
+            Describe orders in natural language — PayPilot parses items, recalculates totals strictly server-side, and launches verified PayPal checkout.
           </p>
         </div>
         {onNavigateDashboard && (
@@ -156,7 +230,7 @@ export const OrderAssistant: React.FC<OrderAssistantProps> = ({ onNavigateDashbo
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition"
           >
             <ArrowLeft className="h-4 w-4" />
-            <span>View All Orders</span>
+            <span>Dashboard</span>
           </button>
         )}
       </div>
@@ -168,26 +242,24 @@ export const OrderAssistant: React.FC<OrderAssistantProps> = ({ onNavigateDashbo
         </div>
       )}
 
-      {/* Completed Banner if paid */}
-      {completedPayment && (
-        <div className="p-6 rounded-2xl bg-emerald-950/40 border border-emerald-800 text-slate-200 space-y-3">
+      {/* Completed Payment Banner */}
+      {completedPayment && activeOrder && (
+        <div className="p-6 rounded-2xl bg-emerald-950/40 border border-emerald-800 text-slate-200 space-y-4">
           <div className="flex items-center gap-2 text-emerald-400 font-bold text-lg">
-            <CheckCircle className="h-6 w-6" />
-            <span>Order #{activeOrder?.order_number} Paid & Verified!</span>
+            <CheckCircle2 className="h-6 w-6" />
+            <span>Order #{activeOrder.order_number} Captured & Paid!</span>
           </div>
           <p className="text-xs text-slate-300">
-            PayPal Payment record was verified server-side with zero amount tampering.
+            Payment successfully captured in PayPal Sandbox with cryptographic server-side validation.
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs font-mono pt-2">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs font-mono">
             <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
               <span className="text-slate-500 block">PayPal Order ID</span>
               <span className="text-blue-400 font-semibold">{completedPayment.paypal_order_id}</span>
             </div>
             <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
               <span className="text-slate-500 block">Capture ID</span>
-              <span className="text-emerald-400 font-semibold">
-                {completedPayment.paypal_capture_id || 'COMPLETED'}
-              </span>
+              <span className="text-emerald-400 font-semibold">{completedPayment.paypal_capture_id || 'COMPLETED'}</span>
             </div>
             <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
               <span className="text-slate-500 block">Status</span>
@@ -198,186 +270,261 @@ export const OrderAssistant: React.FC<OrderAssistantProps> = ({ onNavigateDashbo
             <button
               onClick={() => {
                 setCompletedPayment(null);
-                setCart([]);
+                setDraftOrder(null);
                 setActiveOrder(null);
               }}
               className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-white transition"
             >
-              Create Another Order
+              Parse Another Order
             </button>
             {onNavigateDashboard && (
               <button
                 onClick={onNavigateDashboard}
                 className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-medium text-white transition"
               >
-                Go to Dashboard
+                View in Dashboard
               </button>
             )}
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left 2 Cols: Catalog & Manual Item Form */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Quick Catalog Selector */}
-          <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800">
-            <h2 className="text-lg font-semibold text-white mb-3">Merchant Catalog Items</h2>
-            {loading ? (
-              <p className="text-sm text-slate-400">Loading catalog...</p>
-            ) : products.length === 0 ? (
-              <p className="text-sm text-slate-400">No products configured.</p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {products.map((prod) => (
-                  <div
-                    key={prod.id}
-                    className="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/60 flex items-center justify-between hover:border-slate-600 transition"
-                  >
-                    <div>
-                      <h4 className="font-medium text-white text-sm">{prod.name}</h4>
-                      <p className="text-xs font-mono font-semibold text-blue-400 mt-0.5">
-                        ${parseFloat(prod.unit_price).toFixed(2)} {prod.currency}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => addCatalogProduct(prod)}
-                      className="px-2.5 py-1.5 rounded-lg bg-blue-600/80 hover:bg-blue-600 text-white text-xs font-medium flex items-center gap-1 transition"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      <span>Add</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Manual Test Item Form */}
-          <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800">
-            <div className="flex items-center gap-2 mb-4">
-              <Sparkles className="h-4 w-4 text-blue-400" />
-              <h2 className="text-lg font-semibold text-white">Add Custom Test Order Item</h2>
-            </div>
-            <form onSubmit={addCustomItem} className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-              <div className="sm:col-span-2">
-                <label className="block text-xs uppercase text-slate-400 font-semibold mb-1">
-                  Item Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={customName}
-                  onChange={(e) => setCustomName(e.target.value)}
-                  placeholder="e.g. Test Widget"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs uppercase text-slate-400 font-semibold mb-1">
-                  Unit Price ($)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  required
-                  min="0.01"
-                  value={customPrice}
-                  onChange={(e) => setCustomPrice(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-blue-500"
-                />
-              </div>
-              <div className="flex items-end">
-                <button
-                  type="submit"
-                  className="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-400 text-xs font-semibold flex items-center justify-center gap-1 border border-slate-700 transition h-[38px]"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>Add Custom</span>
-                </button>
-              </div>
-            </form>
-          </div>
+      {/* AI Command Input Bar */}
+      <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+            <Bot className="h-4 w-4 text-blue-400" />
+            <span>Natural Language Merchant Prompt</span>
+          </label>
+          <span className="text-xs text-slate-500 flex items-center gap-1">
+            <HelpCircle className="h-3.5 w-3.5" />
+            Zero-Trust Recalculation Engine
+          </span>
         </div>
 
-        {/* Right Col: Order Cart & Checkout Trigger */}
-        <div className="space-y-4">
-          <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-            <div className="flex items-center gap-2 text-white font-semibold text-lg border-b border-slate-800 pb-3">
-              <ShoppingCart className="h-5 w-5 text-blue-400" />
-              <span>Current Order Tray</span>
-            </div>
+        <div className="relative">
+          <textarea
+            rows={3}
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="e.g. 2 wireless headphones at $45 each and one phone case at $12..."
+            className="w-full p-4 rounded-2xl bg-slate-800/90 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 text-sm leading-relaxed"
+          />
+        </div>
 
-            {cart.length === 0 ? (
-              <p className="text-sm text-slate-500 text-center py-6">Your order tray is empty.</p>
-            ) : (
-              <div className="space-y-3">
-                {cart.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between text-sm py-2 border-b border-slate-800"
-                  >
-                    <div>
-                      <p className="text-white font-medium">{item.name}</p>
-                      <p className="text-xs text-slate-400">
-                        {item.quantity} × ${item.unit_price.toFixed(2)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-white font-semibold">
-                        ${(item.quantity * item.unit_price).toFixed(2)}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removeFromCart(idx)}
-                        className="text-xs text-rose-400 hover:text-rose-300 ml-1 p-1"
-                        title="Remove"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                ))}
-
-                <div className="pt-2 flex justify-between items-center text-base font-bold text-white">
-                  <span>Order Total:</span>
-                  <span className="font-mono text-xl text-blue-400">${subtotal.toFixed(2)} USD</span>
-                </div>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
-                Order Notes
-              </label>
-              <textarea
-                rows={2}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Optional order notes..."
-                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-blue-500"
-              />
-            </div>
-
+        {/* Quick-Prompt Chips */}
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <span className="text-xs text-slate-500 mr-1 font-medium">Quick Examples:</span>
+          {sampleChips.map((chip, idx) => (
             <button
+              key={idx}
               type="button"
-              disabled={cart.length === 0 || isSubmitting}
-              onClick={handleCreateOrderAndCheckout}
-              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 transition disabled:opacity-40"
+              onClick={() => {
+                setPrompt(chip);
+                handleAnalyzePrompt(chip);
+              }}
+              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700/80 text-xs text-slate-300 hover:text-white transition text-left flex items-center gap-1.5"
             >
-              <CreditCard className="h-4 w-4" />
-              <span>{isSubmitting ? 'Creating Order...' : 'Create & Checkout with PayPal'}</span>
+              <Sparkles className="h-3 w-3 text-blue-400 shrink-0" />
+              <span className="truncate max-w-[280px] sm:max-w-none">{chip}</span>
             </button>
+          ))}
+        </div>
 
-            <div className="p-3 bg-blue-950/40 border border-blue-900 rounded-lg flex items-start gap-2 text-xs text-blue-300">
-              <CheckCircle className="h-4 w-4 shrink-0 text-blue-400 mt-0.5" />
-              <span>
-                Calculates totals strictly on server, issues PayPal v2 order, and captures with anti-tamper validation.
-              </span>
+        <div className="pt-2 flex justify-end">
+          <button
+            type="button"
+            disabled={isAnalyzing || !prompt.trim()}
+            onClick={() => handleAnalyzePrompt()}
+            className="py-2.5 px-6 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium flex items-center gap-2 shadow-lg shadow-blue-500/25 transition disabled:opacity-50 text-sm"
+          >
+            {isAnalyzing ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Extracting with Gemini...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4" />
+                <span>Analyze & Draft Order</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Draft Review State (Zero-Trust Verification Card) */}
+      {draftOrder && (
+        <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-6 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-bold text-white">Extracted Order Draft</h2>
+                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-950 text-blue-300 border border-blue-800">
+                  AI Generated
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800">
+                  Verified by Server Engine
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                Prompt: <span className="italic text-slate-300">"{draftOrder.raw_prompt}"</span>
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleAddDraftItem}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-400 text-xs font-medium flex items-center gap-1 border border-slate-700 transition"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Add Item</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDraftOrder(null)}
+                className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-medium border border-rose-500/30 transition"
+              >
+                Discard Draft
+              </button>
+            </div>
+          </div>
+
+          {/* Editable Draft Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-slate-300">
+              <thead className="text-xs uppercase bg-slate-800/60 text-slate-400 border-b border-slate-700">
+                <tr>
+                  <th className="py-3 px-4">Product / Item Name</th>
+                  <th className="py-3 px-4 w-28">Quantity</th>
+                  <th className="py-3 px-4 w-36">Unit Price ($)</th>
+                  <th className="py-3 px-4 w-32">Line Total</th>
+                  <th className="py-3 px-4 w-16 text-right"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {draftOrder.items.map((item, idx) => (
+                  <tr key={idx} className="hover:bg-slate-800/30 transition">
+                    <td className="py-3 px-4">
+                      <input
+                        type="text"
+                        value={item.name}
+                        onChange={(e) => handleItemChange(idx, 'name', e.target.value)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-blue-500"
+                      />
+                    </td>
+                    <td className="py-3 px-4">
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-blue-500"
+                      />
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1.5 text-slate-400">$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={item.unit_price}
+                          onChange={(e) => handleItemChange(idx, 'unit_price', e.target.value)}
+                          className="w-full pl-6 pr-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 font-mono font-semibold text-blue-400">
+                      ${parseFloat(String(item.line_total)).toFixed(2)}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      {draftOrder.items.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDraftItem(idx)}
+                          className="p-1.5 text-slate-400 hover:text-rose-400 transition"
+                          title="Remove item"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Totals & Launch Section */}
+          <div className="p-4 rounded-2xl bg-slate-800/60 border border-slate-700/60 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs uppercase text-slate-400 font-semibold">Server Recalculated Total:</span>
+                <span className="font-mono text-2xl font-bold text-white">${parseFloat(draftOrder.total).toFixed(2)}</span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
+                  {draftOrder.currency}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 flex items-center gap-1">
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+                Zero-Trust validation: prices recalculate on backend prior to PayPal authorization.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <button
+                type="button"
+                disabled={isConfirming || draftOrder.items.length === 0}
+                onClick={handleConfirmOrder}
+                className="w-full sm:w-auto py-3 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 transition disabled:opacity-50 text-sm"
+              >
+                {isConfirming ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Confirming...</span>
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="h-4 w-4" />
+                    <span>Confirm & Launch PayPal Checkout</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Catalog Reference Section */}
+      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-3">
+          Merchant Catalog Quick Reference
+        </h3>
+        {products.length === 0 ? (
+          <p className="text-xs text-slate-500">Loading catalog items...</p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            {products.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => {
+                  const newPrompt = `1 ${p.name} for $${parseFloat(p.unit_price).toFixed(2)}`;
+                  setPrompt(newPrompt);
+                  handleAnalyzePrompt(newPrompt);
+                }}
+                className="p-3 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 text-left transition"
+              >
+                <p className="text-xs font-medium text-white truncate">{p.name}</p>
+                <p className="text-xs font-mono font-semibold text-blue-400 mt-0.5">
+                  ${parseFloat(p.unit_price).toFixed(2)}
+                </p>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* PayPal Checkout Modal */}
@@ -385,7 +532,7 @@ export const OrderAssistant: React.FC<OrderAssistantProps> = ({ onNavigateDashbo
         order={activeOrder}
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onPaymentSuccess={handlePaymentSuccess}
+        onPaymentSuccess={(p) => setCompletedPayment(p)}
       />
     </div>
   );

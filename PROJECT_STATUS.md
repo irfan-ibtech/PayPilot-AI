@@ -72,20 +72,40 @@
   - Renders `<PayPalButtons>` with server-driven `createOrder` and `onApprove` capture triggering.
   - Handles `onError` and `onCancel` with merchant user feedback.
   - Displays verified capture ID and anti-tamper confirmation.
-  - Provides a simulated capture option for rapid local sandbox testing without credentials.
 - **Live Dashboard Updates (`frontend/src/pages/Dashboard.tsx`):**
   - Connected StatCards directly to `GET /api/orders` calculations (Verified Revenue, Total Orders, Paid Orders, Pending Orders).
   - Displays real database orders table with status badges (`PAID`, `PENDING`).
   - Row-level "Pay with PayPal" trigger for any pending orders.
-- **Order Assistant (`frontend/src/pages/OrderAssistant.tsx`):**
-  - Instant order builder from catalog + custom item inputs.
-  - One-click order creation and immediate PayPal checkout launching.
 
 ---
 
-## Next Steps: Milestone 3 — AI Order Assistant & Intelligence Copilot using Gemini 🚀
-- Gemini API SDK integration in `backend`.
-- Natural language merchant commands (e.g. "Create an invoice for 2 keyboards and 1 headset").
-- Autonomous order generation & intent extraction via Gemini 2.5 Flash function calling.
-- Proactive merchant analytics: inventory velocity, pricing optimizations, bundle deal recommendations stored in `business_recommendations`.
-- Frontend conversational Copilot connected directly to Gemini streaming responses.
+## Milestone 3: AI Order Assistant via Gemini Integration — COMPLETE ✅
+
+### 1. Gemini AI Service (`backend/app/Services/GeminiService.php`)
+- **Model Configuration:** Configured in `backend/config/ai.php` targeting Gemini (`gemini-1.5-flash` or `gemini-2.5-flash`).
+- **Structured Extraction:** Executes calls with `systemInstruction` enforcing financial extraction rules and `generationConfig` (`temperature: 0.1`, `response_mime_type: "application/json"`).
+- **Graceful Fallback:** Integrated NLP heuristic fallback to ensure offline/mock environments pass without requiring immediate API keys.
+
+### 2. Zero-Trust Pricing Validation Architecture (`backend/app/Http/Controllers/Api/AIOrderController.php`)
+- **`POST /api/ai/parse-order`:**
+  - Validates merchant prompt.
+  - Passes prompt through `GeminiService`.
+  - **Zero-Trust Server Recalculation:** Client/AI claims are never trusted blindly. Quantities are bounded and cast to integers; unit prices are rounded to 2 decimal places. Line totals (`round($quantity * $unit_price, 2)`) and total sum are calculated strictly by the PHP backend engine before returning the preview.
+- **`POST /api/ai/confirm-order`:**
+  - Accepts merchant-reviewed line items.
+  - Validates all line item fields with Laravel validation rules.
+  - Generates unique order number (`PP-XXXXXXXX`) and commits records in a DB transaction with status `PENDING`.
+  - Returns order record immediately prepared for PayPal v2 checkout.
+
+### 3. Frontend AI Assistant Experience (`frontend/src/pages/OrderAssistant.tsx`)
+- **Natural Language Command Bar:** Top-level prompt area with 1-click sample chips (e.g., `"2 wireless headphones at $45 each and one phone case at $12"`).
+- **Draft Review Card:** Editable line-item table allowing merchant adjustments to names, quantities, and prices in real-time.
+- **Seamless Flow to PayPal:** "Confirm & Launch PayPal Checkout" sends the draft to `/api/ai/confirm-order`, creates the database order, opens `PayPalCheckoutModal`, and upon sandbox capture displays verified transaction IDs and updates the merchant dashboard.
+
+---
+
+## Next Steps: Milestone 4 — AI Business Copilot & Merchant Analytics 🚀
+- Conversational Copilot powered by Gemini for merchant business Q&A and financial insights.
+- Autonomous telemetry: Average Order Value (AOV), conversion rates, and revenue trend analysis.
+- Autonomous business recommendations generated and stored in `business_recommendations` table (e.g. bundling proposals, dynamic discounting, abandoned checkout mitigation).
+- Interactive Copilot chat interface in `frontend/src/pages/Copilot.tsx` with one-click action triggers.
