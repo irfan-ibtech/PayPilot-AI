@@ -137,7 +137,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab }) => 
           <div className="flex items-center justify-between text-slate-400">
             <span className="flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Gemini 2.5 Flash
+              Gemini 3.1 Flash Lite
             </span>
             <span className="text-emerald-400 font-mono font-medium">Live</span>
           </div>

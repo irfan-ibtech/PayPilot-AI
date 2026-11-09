@@ -45,7 +45,7 @@ class AIOrderController extends Controller
         // Zero-Trust Catalog Price Resolution & Server Recalculation Engine
         $merchantProducts = Product::where('user_id', $request->user()->id)->get();
         $calculatedItems = [];
-        $subtotal = '0.00';
+        $subtotal = Money::format('0', $currency);
 
         foreach ($rawItems as $item) {
             $rawName = trim($item['name'] ?? 'Item');
@@ -77,7 +77,7 @@ class AIOrderController extends Controller
                         'id' => $p->id,
                         'name' => $p->name,
                         'sku' => $p->sku,
-                        'unit_price' => Money::format($p->unit_price),
+                        'unit_price' => Money::format($p->unit_price, $currency),
                     ])->values()->all();
                 } elseif ($matches->count() === 1) {
                     $matchedProduct = $matches->first();
@@ -90,22 +90,22 @@ class AIOrderController extends Controller
                 }
             }
 
-            $promptUnitPrice = isset($item['unit_price']) ? Money::format($item['unit_price']) : null;
+            $promptUnitPrice = isset($item['unit_price']) ? Money::format($item['unit_price'], $currency) : null;
 
             if ($matchedProduct) {
-                $unitPrice = Money::format($matchedProduct->unit_price);
+                $unitPrice = Money::format($matchedProduct->unit_price, $currency);
                 $productId = $matchedProduct->id;
                 $catalogMatched = true;
                 $productName = $matchedProduct->name;
             } else {
-                $unitPrice = Money::format($item['unit_price'] ?? '0.00');
+                $unitPrice = Money::format($item['unit_price'] ?? '0.00', $currency);
                 $productId = null;
                 $catalogMatched = false;
                 $productName = $rawName;
             }
 
-            $lineTotal = Money::mul($quantity, $unitPrice);
-            $subtotal = Money::add($subtotal, $lineTotal);
+            $lineTotal = Money::mul($quantity, $unitPrice, $currency);
+            $subtotal = Money::add($subtotal, $lineTotal, $currency);
 
             $calculatedItems[] = [
                 'name' => $productName,
@@ -152,15 +152,15 @@ class AIOrderController extends Controller
         $currency = strtoupper($validated['currency'] ?? 'USD');
 
         // Zero-Trust final calculation on server using Money (BCMath)
-        $subtotal = '0.00';
+        $subtotal = Money::format('0', $currency);
         $orderItemsData = [];
 
         foreach ($validated['items'] as $item) {
             $qty = (int) $item['quantity'];
-            $unitPrice = Money::format($item['unit_price']);
-            $lineTotal = Money::mul($qty, $unitPrice);
+            $unitPrice = Money::format($item['unit_price'], $currency);
+            $lineTotal = Money::mul($qty, $unitPrice, $currency);
 
-            $subtotal = Money::add($subtotal, $lineTotal);
+            $subtotal = Money::add($subtotal, $lineTotal, $currency);
 
             $orderItemsData[] = [
                 'product_id' => $item['product_id'] ?? null,

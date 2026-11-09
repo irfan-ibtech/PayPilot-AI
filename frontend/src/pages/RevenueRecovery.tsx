@@ -363,7 +363,7 @@ export const RevenueRecovery: React.FC = () => {
             <h1 className="text-2xl font-bold text-white tracking-tight">AI Revenue Recovery Agent</h1>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 text-white flex items-center gap-1 shadow-sm">
               <Sparkles className="h-3 w-3" />
-              Gemini 2.5 Flash • Live
+              Gemini 3.1 Flash Lite • Live
             </span>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-1">
               <ShieldCheck className="h-3 w-3" />
@@ -491,7 +491,7 @@ export const RevenueRecovery: React.FC = () => {
         <div className="lg:col-span-5 space-y-3">
           <div className="flex items-center justify-between text-xs text-slate-400 px-1">
             <span>Identified Opportunities ({opportunities.length})</span>
-            <span className="font-mono text-[11px]">Ranked by Probability</span>
+            <span className="font-mono text-[11px]">Ranked by Priority Score</span>
           </div>
 
           {isLoading ? (
@@ -672,7 +672,7 @@ export const RevenueRecovery: React.FC = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                   {[
                     { step: 1, title: '1. Detected', sub: 'Cart Abandoned' },
-                    { step: 2, title: '2. Analyzed', sub: 'Gemini 2.5 Flash' },
+                    { step: 2, title: '2. Analyzed', sub: 'Gemini 3.1 Flash Lite' },
                     { step: 3, title: '3. Approved', sub: 'Zero-Trust Gate' },
                     { step: 4, title: '4. Settled', sub: 'PayPal Captured' },
                   ].map((s) => {
@@ -751,7 +751,7 @@ export const RevenueRecovery: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-purple-400 font-semibold text-sm">
                     <Bot className="h-4 w-4" />
-                    <span>Gemini 2.5 Flash Autonomous Behavioral Diagnostic</span>
+                    <span>Gemini 3.1 Flash Lite Autonomous Behavioral Diagnostic</span>
                   </div>
                   <span className="text-[11px] font-mono text-purple-300 bg-purple-950/80 px-2 py-0.5 rounded border border-purple-800">
                     Confidence: {selectedOpportunity.ai_confidence || 85}%

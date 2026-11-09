@@ -252,7 +252,7 @@ export const OrderAssistant: React.FC<OrderAssistantProps> = ({ onNavigateDashbo
             <h1 className="text-2xl font-bold text-white tracking-tight">AI Order Assistant</h1>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex items-center gap-1 shadow-sm">
               <Sparkles className="h-3 w-3" />
-              Gemini 2.5 Flash • Live
+              Gemini 3.1 Flash Lite • Live
             </span>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-1">
               <ShieldCheck className="h-3 w-3" />
@@ -394,7 +394,7 @@ export const OrderAssistant: React.FC<OrderAssistantProps> = ({ onNavigateDashbo
             {isAnalyzing ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Extracting with Gemini 2.5 Flash...</span>
+                <span>Extracting with Gemini 3.1 Flash Lite...</span>
               </>
             ) : (
               <>

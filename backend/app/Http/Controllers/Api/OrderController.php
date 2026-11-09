@@ -47,15 +47,15 @@ class OrderController extends Controller
         $currency = strtoupper($validated['currency'] ?? 'USD');
 
         // Strictly calculate subtotal and total on the server using Money (BCMath)
-        $subtotal = '0.00';
+        $subtotal = Money::format('0', $currency);
         $orderItemsData = [];
 
         foreach ($validated['items'] as $item) {
             $qty = (int) $item['quantity'];
-            $unitPrice = Money::format($item['unit_price']);
-            $lineTotal = Money::mul($qty, $unitPrice);
+            $unitPrice = Money::format($item['unit_price'], $currency);
+            $lineTotal = Money::mul($qty, $unitPrice, $currency);
 
-            $subtotal = Money::add($subtotal, $lineTotal);
+            $subtotal = Money::add($subtotal, $lineTotal, $currency);
 
             $orderItemsData[] = [
                 'product_id' => $item['product_id'] ?? null,

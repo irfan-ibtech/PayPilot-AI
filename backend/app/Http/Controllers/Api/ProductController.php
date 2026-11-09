@@ -17,6 +17,10 @@ class ProductController extends Controller
 
     public function show(Request $request, Product $product): JsonResponse
     {
+        if ($product->user_id !== $request->user()->id) {
+            abort(404);
+        }
+
         return response()->json(['data' => $product]);
     }
 

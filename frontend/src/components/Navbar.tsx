@@ -178,7 +178,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = 'dashboard', onSele
                   )}
                 </div>
                 <p className="text-slate-400 pl-7 leading-relaxed">
-                  In Revenue Recovery, click <strong className="text-slate-200">"Run Recovery Scan"</strong>. The agent scores uncaptured drop-offs from 0–100, generates Gemini 2.5 Flash root-cause diagnostics, and drafts personalized customer recovery reminders.
+                  In Revenue Recovery, click <strong className="text-slate-200">"Run Recovery Scan"</strong>. The agent scores uncaptured drop-offs from 10–98, generates Gemini 3.1 Flash Lite root-cause diagnostics, and drafts personalized customer recovery reminders.
                 </p>
               </div>
 

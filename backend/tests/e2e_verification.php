@@ -478,8 +478,58 @@ if ($registerRes['code'] === 201) {
             "HTTP {$crossOppRes['code']} correctly denied cross-tenant execution"
         );
     }
+
+    // Tenant 2 attempts to read Tenant 1's product (IDOR check)
+    $prod1Res = runHttp('GET', "{$baseUrl}/products/1", null, $tenant2Token);
+    assertTest(
+        'Multi-Tenant Product Isolation (IDOR blocked via 404)',
+        $prod1Res['code'] === 404,
+        "HTTP {$prod1Res['code']} correctly returned 404 Not Found"
+    );
 } else {
     assertTest('Multi-Tenant Register Tester', false, 'Failed to create secondary tenant');
+}
+
+// ====================================================================
+// SECTION 11: ADVERSARIAL MATHEMATICS & APPROVAL GATE TESTS
+// ====================================================================
+echo "\n11. ADVERSARIAL MATHEMATICS & RECOVERY GATE ENFORCEMENT\n";
+
+// Multi-currency BCMath scales and half-up rounding
+require_once __DIR__ . '/../app/Support/Money.php';
+use App\Support\Money;
+
+$usdFormatted = Money::format('10.555', 'USD'); // Expected 10.56 (half-up)
+$usdRoundDown = Money::format('10.554', 'USD'); // Expected 10.55
+$jpyFormatted = Money::format('10.5', 'JPY');    // Expected 11 (scale 0 half-up)
+$bhdFormatted = Money::format('1.2345', 'BHD');  // Expected 1.235 (scale 3 half-up)
+$kwdFormatted = Money::format('5.5001', 'KWD');  // Expected 5.500 (scale 3)
+
+assertTest(
+    'Multi-Currency ISO-4217 Scales & Half-Up Rounding',
+    $usdFormatted === '10.56' && $usdRoundDown === '10.55' && $jpyFormatted === '11' && $bhdFormatted === '1.235' && $kwdFormatted === '5.500',
+    "USD: {$usdFormatted}, JPY: {$jpyFormatted}, BHD: {$bhdFormatted}, KWD: {$kwdFormatted}"
+);
+
+// Recovery Approval Gate: Attempt checkout on unapproved PENDING opportunity
+// Create an unapproved opportunity to test approval enforcement
+$allOppsRes = runHttp('GET', "{$baseUrl}/recovery/opportunities?status=PENDING", null, $token);
+$pendingOpps = $allOppsRes['body']['data'] ?? [];
+$unapprovedOpp = null;
+foreach ($pendingOpps as $po) {
+    if ($po['status'] === 'PENDING') {
+        $unapprovedOpp = $po;
+        break;
+    }
+}
+
+if ($unapprovedOpp) {
+    $unapprovedCheckoutRes = runHttp('POST', "{$baseUrl}/recovery/opportunities/{$unapprovedOpp['id']}/checkout", [], $token);
+    assertTest(
+        'Zero-Trust Recovery Approval Gate (Unapproved checkout blocked)',
+        $unapprovedCheckoutRes['code'] === 400 && str_contains(strtolower($unapprovedCheckoutRes['body']['message'] ?? ''), 'must be approved'),
+        "HTTP {$unapprovedCheckoutRes['code']}: " . ($unapprovedCheckoutRes['body']['message'] ?? '')
+    );
 }
 
 // ====================================================================

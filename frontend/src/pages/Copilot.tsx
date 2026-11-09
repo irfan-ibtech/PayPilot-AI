@@ -233,7 +233,7 @@ export const Copilot: React.FC<CopilotProps> = ({ onNavigateRecovery, onNavigate
             <h1 className="text-2xl font-bold text-white tracking-tight">AI Financial Copilot</h1>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-indigo-600 to-blue-600 text-white flex items-center gap-1 shadow-sm">
               <Bot className="h-3 w-3" />
-              Gemini 2.5 Flash • Live
+              Gemini 3.1 Flash Lite • Live
             </span>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-1">
               <ShieldCheck className="h-3 w-3" />

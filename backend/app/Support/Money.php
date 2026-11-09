@@ -49,7 +49,20 @@ class Money
             $raw = number_format((float) $raw, 8, '.', '');
         }
 
-        // bcadd with 0 truncates/formats strictly to target scale
+        // Half-up rounding for arbitrary-precision BCMath strings
+        if (str_contains($raw, '.')) {
+            [$integer, $fraction] = explode('.', $raw, 2);
+            if (strlen($fraction) > $scale) {
+                $roundingOffset = '0.' . str_repeat('0', $scale) . '5';
+                if (str_starts_with($raw, '-')) {
+                    $raw = bcsub($raw, $roundingOffset, $scale + 1);
+                } else {
+                    $raw = bcadd($raw, $roundingOffset, $scale + 1);
+                }
+            }
+        }
+
+        // bcadd with 0 truncates strictly to target scale after half-up adjustment
         return bcadd($raw, '0', $scale);
     }
 

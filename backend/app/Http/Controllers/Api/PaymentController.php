@@ -397,6 +397,22 @@ class PaymentController extends Controller
             if ($ppStatus === 'COMPLETED') {
                 $capture = $payPalDetails['purchase_units'][0]['payments']['captures'][0] ?? null;
                 $captureId = $capture['id'] ?? null;
+                $order = $payment->order;
+
+                // Security check: Validate captured amount and currency using Money (BCMath)
+                if (! str_starts_with($paypalOrderId, 'SIMULATED-') && $capture) {
+                    $capturedAmount = Money::format($capture['amount']['value'] ?? '0.00', $order->currency);
+                    $capturedCurrency = strtoupper($capture['amount']['currency_code'] ?? '');
+                    $expectedAmount = Money::format($order->total, $order->currency);
+                    $expectedCurrency = strtoupper($order->currency);
+
+                    if (! Money::equals($capturedAmount, $expectedAmount, $order->currency) || $capturedCurrency !== $expectedCurrency) {
+                        return response()->json([
+                            'message' => 'Security verification failed: Captured amount or currency mismatch during reconciliation.',
+                            'status' => 'FAILED',
+                        ], 422);
+                    }
+                }
 
                 $payment->update([
                     'status' => 'COMPLETED',
@@ -405,16 +421,42 @@ class PaymentController extends Controller
                     'payload' => $payPalDetails,
                 ]);
 
-                $payment->order->update(['status' => 'PAID']);
+                $order->update(['status' => 'PAID']);
+
+                // Reconcile associated Recovery Opportunity if present
+                $opportunity = RecoveryOpportunity::where('order_id', $order->id)
+                    ->whereIn('status', ['PENDING', 'APPROVED', 'IN_FLIGHT'])
+                    ->first();
+
+                if ($opportunity) {
+                    $recoveryTime = $opportunity->created_at ? max(1, now()->diffInSeconds($opportunity->created_at)) : null;
+                    $audit = $opportunity->audit_trail ?? [];
+                    $audit[] = [
+                        'action' => 'RECOVERED',
+                        'actor' => 'PAYPAL_RECONCILIATION',
+                        'timestamp' => now()->toIso8601String(),
+                        'details' => "Payment verified and captured via PayPal out-of-band reconciliation. Capture ID: {$captureId}.",
+                    ];
+
+                    $opportunity->update([
+                        'status' => 'RECOVERED',
+                        'workflow_state' => 'RECOVERED',
+                        'recovered_payment_id' => $payment->id,
+                        'recovered_at' => now(),
+                        'recovery_time_seconds' => $recoveryTime,
+                        'audit_trail' => $audit,
+                    ]);
+                }
 
                 PaymentEvent::log(
                     $request->user()->id,
                     $payment->order_id,
                     'PAYMENT_RECONCILED',
                     'PAYPAL_API',
-                    "Payment reconciled as COMPLETED via direct PayPal order inquiry.",
+                    "Payment reconciled as COMPLETED via direct PayPal order inquiry (Capture ID: {$captureId}).",
                     $payPalDetails,
-                    $payment->id
+                    $payment->id,
+                    $opportunity?->id
                 );
 
                 return response()->json([

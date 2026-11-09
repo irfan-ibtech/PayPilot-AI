@@ -76,8 +76,11 @@ class RecoveryAgentService
             $failureReason = $lastPayment?->failure_reason ?? 'Customer exited during payment authorization';
             $hoursSinceCreation = max(1, (int) round(now()->diffInMinutes($order->created_at) / 60));
 
+            $tierHigh = Money::comp($order->total, '100.00', $order->currency) >= 0;
+            $tierMedium = Money::comp($order->total, '40.00', $order->currency) >= 0;
+
             $signals = [
-                'cart_value_tier' => (float) $order->total >= 100 ? 'high' : ((float) $order->total >= 40 ? 'medium' : 'standard'),
+                'cart_value_tier' => $tierHigh ? 'high' : ($tierMedium ? 'medium' : 'standard'),
                 'hours_since_dropoff' => $hoursSinceCreation,
                 'attempt_count' => $payments->count(),
                 'last_failure_reason' => $failureReason,
@@ -211,12 +214,15 @@ class RecoveryAgentService
         }
 
         // Factor 2: Cart size sweet-spot ($40 - $250)
-        $total = (float) $order->total;
-        if ($total >= 40 && $total <= 250) {
+        $isSweetSpot = Money::comp($order->total, '40.00', $order->currency) >= 0 && Money::comp($order->total, '250.00', $order->currency) <= 0;
+        $isHighBand = Money::comp($order->total, '250.00', $order->currency) > 0 && Money::comp($order->total, '600.00', $order->currency) <= 0;
+        $isLowBand = Money::comp($order->total, '40.00', $order->currency) < 0;
+
+        if ($isSweetSpot) {
             $cartTierAdjustment = 15;
-        } elseif ($total > 250 && $total <= 600) {
+        } elseif ($isHighBand) {
             $cartTierAdjustment = 10;
-        } elseif ($total < 40) {
+        } elseif ($isLowBand) {
             $cartTierAdjustment = 5;
         } else {
             $cartTierAdjustment = 0;
@@ -334,7 +340,7 @@ class RecoveryAgentService
             throw new Exception('Unauthorized opportunity access.');
         }
 
-        if ($opportunity->status !== 'PENDING') {
+        if (! in_array($opportunity->status, ['PENDING', 'APPROVED'])) {
             throw new Exception("Opportunity cannot be rejected from status '{$opportunity->status}'.");
         }
 
@@ -450,6 +456,29 @@ class RecoveryAgentService
 
         if ($order->status === 'PAID') {
             throw new Exception('Order has already been paid.');
+        }
+
+        if ($opportunity->status === 'RECOVERED') {
+            throw new Exception('Opportunity has already been recovered.');
+        }
+
+        if (! in_array($opportunity->status, ['APPROVED', 'IN_FLIGHT'])) {
+            throw new Exception("Opportunity must be approved by the merchant before launching recovery checkout (current status: {$opportunity->status}).");
+        }
+
+        // Idempotency: Return existing pending session if already created and uncaptured
+        if ($opportunity->status === 'IN_FLIGHT' && $opportunity->latest_payment_id) {
+            $existingPayment = Payment::where('id', $opportunity->latest_payment_id)
+                ->where('status', 'CREATED')
+                ->first();
+            if ($existingPayment && $existingPayment->paypal_order_id) {
+                return [
+                    'opportunity' => $opportunity->fresh(['order.items', 'latestPayment']),
+                    'paypal_order_id' => $existingPayment->paypal_order_id,
+                    'payment' => $existingPayment,
+                    'order' => $order->fresh(['items']),
+                ];
+            }
         }
 
         $attemptNumber = $order->payments()->count() + 1;
