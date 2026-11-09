@@ -38,13 +38,19 @@ const MainLayout: React.FC = () => {
       <div className="flex-1 flex">
         <Sidebar currentTab={currentTab} onSelectTab={setCurrentTab} />
         <main className="flex-1 p-8 overflow-y-auto max-w-7xl">
-          {currentTab === 'dashboard' && <Dashboard />}
+          {currentTab === 'dashboard' && (
+            <Dashboard onNavigateCopilot={() => setCurrentTab('copilot')} />
+          )}
           {currentTab === 'assistant' && (
             <OrderAssistant onNavigateDashboard={() => setCurrentTab('dashboard')} />
           )}
           {currentTab === 'copilot' && <Copilot />}
-          {currentTab === 'products' && <Dashboard />}
-          {currentTab === 'payments' && <Dashboard />}
+          {currentTab === 'products' && (
+            <Dashboard onNavigateCopilot={() => setCurrentTab('copilot')} />
+          )}
+          {currentTab === 'payments' && (
+            <Dashboard onNavigateCopilot={() => setCurrentTab('copilot')} />
+          )}
         </main>
       </div>
     </div>

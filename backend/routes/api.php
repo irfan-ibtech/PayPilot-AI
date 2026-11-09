@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AICopilotController;
 use App\Http\Controllers\Api\AIOrderController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\OrderController;
@@ -34,6 +35,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // AI Natural Language Order Extraction & Zero-Trust Engine
     Route::post('/ai/parse-order', [AIOrderController::class, 'parse']);
     Route::post('/ai/confirm-order', [AIOrderController::class, 'confirmAndCreate']);
+
+    // Deterministic Analytics & AI Copilot Insights
+    Route::get('/analytics/overview', [AICopilotController::class, 'getOverview']);
+    Route::post('/ai/copilot/ask', [AICopilotController::class, 'ask']);
+    Route::get('/ai/copilot/recommendations', [AICopilotController::class, 'getRecommendations']);
 
     // PayPal Verification & Capture Engine
     Route::get('/payments/paypal/client-id', [PaymentController::class, 'getPayPalClientId']);

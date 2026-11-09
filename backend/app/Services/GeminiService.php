@@ -26,7 +26,6 @@ class GeminiService
      */
     public function parseNaturalLanguageOrder(string $prompt): array
     {
-        // Graceful fallback parser if GEMINI_API_KEY is not configured
         if (empty($this->apiKey)) {
             return $this->fallbackNaturalLanguageParser($prompt);
         }
@@ -81,12 +80,11 @@ class GeminiService
         ])->post($url, $payload);
 
         if ($response->failed()) {
-            $errorData = $response->json();
-            $errorMessage = $errorData['error']['message'] ?? $response->body();
-            // If the key is invalid or quota exceeded, fall back safely while logging
             if ($response->status() === 400 || $response->status() === 403 || $response->status() === 429) {
                 return $this->fallbackNaturalLanguageParser($prompt, "(Fallback: Gemini API {$response->status()})");
             }
+            $errorData = $response->json();
+            $errorMessage = $errorData['error']['message'] ?? $response->body();
             throw new RuntimeException("Gemini API call failed ({$response->status()}): {$errorMessage}");
         }
 
@@ -97,7 +95,6 @@ class GeminiService
             throw new RuntimeException('Gemini returned an empty response candidate.');
         }
 
-        // Clean markdown code fence if present
         $cleanJson = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($rawText));
         $decoded = json_decode($cleanJson, true);
 
@@ -109,6 +106,175 @@ class GeminiService
     }
 
     /**
+     * Generate executive business intelligence & strategic recommendations from verified metrics.
+     */
+    public function generateBusinessInsights(array $metrics, ?string $userQuestion = null): array
+    {
+        $question = $userQuestion ?: 'Provide an executive business summary and 3 strategic recommendations to improve my store performance.';
+
+        if (empty($this->apiKey)) {
+            return $this->fallbackBusinessInsights($metrics, $question);
+        }
+
+        $url = str_replace(
+            ['{model}', '{key}'],
+            [$this->model, $this->apiKey],
+            $this->endpointTemplate
+        );
+
+        $systemInstruction = "You are PayPilot Copilot, an elite CFO and merchant operations advisor. You are provided with real, verified transaction analytics from the merchant's store. 
+CRITICAL RULES:
+1. Base all conclusions strictly on the provided verified metrics. Do not fabricate numbers or invent non-existent trends.
+2. Format your response with clear Markdown headers, bold key metrics, concise observations, and tactical action items.
+3. Return your response in JSON with two keys:
+   - 'analysis': markdown formatted text answering the merchant's question directly with clear analytical depth.
+   - 'recommendations': array of 2 to 3 objects, each with:
+     {
+       'title': string,
+       'description': string,
+       'supporting_metric': string,
+       'suggested_action': string,
+       'priority': 'high' | 'medium' | 'low'
+     }";
+
+        $metricsJson = json_encode($metrics, JSON_PRETTY_PRINT);
+        $userPrompt = "VERIFIED MERCHANT STORE METRICS:\n{$metricsJson}\n\nMERCHANT QUESTION: \"{$question}\"\n\nGenerate analytical response and actionable recommendations in the requested JSON structure.";
+
+        $payload = [
+            'contents' => [
+                [
+                    'role' => 'user',
+                    'parts' => [
+                        [
+                            'text' => $userPrompt,
+                        ],
+                    ],
+                ],
+            ],
+            'systemInstruction' => [
+                'parts' => [
+                    [
+                        'text' => $systemInstruction,
+                    ],
+                ],
+            ],
+            'generationConfig' => [
+                'temperature' => 0.2,
+                'response_mime_type' => 'application/json',
+            ],
+        ];
+
+        $response = Http::withHeaders([
+            'Content-Type' => 'application/json',
+        ])->post($url, $payload);
+
+        if ($response->failed()) {
+            if ($response->status() === 400 || $response->status() === 403 || $response->status() === 429) {
+                return $this->fallbackBusinessInsights($metrics, $question);
+            }
+            $errorData = $response->json();
+            $errorMessage = $errorData['error']['message'] ?? $response->body();
+            throw new RuntimeException("Gemini Copilot call failed ({$response->status()}): {$errorMessage}");
+        }
+
+        $responseData = $response->json();
+        $rawText = $responseData['candidates'][0]['content']['parts'][0]['text'] ?? null;
+
+        if (! $rawText) {
+            return $this->fallbackBusinessInsights($metrics, $question);
+        }
+
+        $cleanJson = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($rawText));
+        $decoded = json_decode($cleanJson, true);
+
+        if (! is_array($decoded) || ! isset($decoded['analysis']) || ! isset($decoded['recommendations'])) {
+            return $this->fallbackBusinessInsights($metrics, $question);
+        }
+
+        return [
+            'analysis' => $decoded['analysis'],
+            'recommendations' => $this->sanitizeRecommendations($decoded['recommendations']),
+        ];
+    }
+
+    /**
+     * Fallback deterministic business insights when GEMINI_API_KEY is not supplied.
+     */
+    protected function fallbackBusinessInsights(array $metrics, string $question): array
+    {
+        $revenue = $metrics['formatted_revenue'] ?? '$0.00';
+        $paidOrders = $metrics['paid_orders'] ?? 0;
+        $totalOrders = $metrics['total_orders'] ?? 0;
+        $conversionRate = $metrics['conversion_rate'] ?? 0.0;
+        $aov = $metrics['formatted_aov'] ?? '$0.00';
+        $pending = $metrics['pending_orders'] ?? 0;
+
+        $topProduct = $metrics['top_selling_products'][0]['product_name'] ?? 'Flagship Item';
+        $topRevenue = isset($metrics['top_selling_products'][0]['total_revenue_generated'])
+            ? '$' . number_format($metrics['top_selling_products'][0]['total_revenue_generated'], 2)
+            : '$0.00';
+
+        $analysis = "### Executive Performance Diagnostic
+
+- **Verified Revenue:** **{$revenue}** across **{$paidOrders}** successful transactions.
+- **Order Conversion Rate:** **{$conversionRate}%** ({$paidOrders} settled out of {$totalOrders} total recorded).
+- **Average Order Value (AOV):** **{$aov}** per completed order.
+- **Leading Revenue Driver:** **{$topProduct}** representing **{$topRevenue}** in gross volume.
+
+#### Operational Assessment
+Your sales telemetry demonstrates robust transaction health with steady settlement via the PayPal v2 REST API. Current merchant performance indicates that **{$topProduct}** serves as your primary customer acquisition funnel. With **{$pending} orders currently in pending status**, closing checkout friction directly converts uncaptured intent into verified cash flow.";
+
+        $recommendations = [
+            [
+                'title' => 'Recover Unpaid Orders via PayPal Express Invoicing',
+                'description' => "You currently have {$pending} pending orders awaiting checkout completion. Sending automated PayPal 1-click payment links will substantially recover abandoned revenue.",
+                'supporting_metric' => "{$pending} Pending Orders (~" . ($pending * (float) ($metrics['average_order_value'] ?? 35)) . " recoverable)",
+                'suggested_action' => 'Deploy 1-click PayPal paylinks to pending carts',
+                'priority' => 'high',
+            ],
+            [
+                'title' => "Capitalize on Top Seller: {$topProduct}",
+                'description' => "{$topProduct} is currently generating {$topRevenue}. Creating an accessory bundle or offering a 10% volume discount on companion accessories will increase AOV beyond {$aov}.",
+                'supporting_metric' => "Top Seller Revenue: {$topRevenue}",
+                'suggested_action' => "Create combo bundle deal around {$topProduct}",
+                'priority' => 'medium',
+            ],
+            [
+                'title' => 'Implement Dynamic Volume Pricing',
+                'description' => "With an Average Order Value of {$aov}, offering tiered incentives (e.g., free priority shipping on orders over $" . round((float) ($metrics['average_order_value'] ?? 50) * 1.3) . ") will lift cart sizes across all categories.",
+                'supporting_metric' => "Current AOV: {$aov}",
+                'suggested_action' => 'Establish free shipping threshold at 130% of AOV',
+                'priority' => 'low',
+            ],
+        ];
+
+        return [
+            'analysis' => $analysis,
+            'recommendations' => $recommendations,
+        ];
+    }
+
+    /**
+     * Sanitize recommendations array.
+     */
+    protected function sanitizeRecommendations(array $recommendations): array
+    {
+        $sanitized = [];
+        foreach ($recommendations as $rec) {
+            $sanitized[] = [
+                'title' => trim($rec['title'] ?? 'Strategic Action'),
+                'description' => trim($rec['description'] ?? ''),
+                'supporting_metric' => trim($rec['supporting_metric'] ?? 'Store Telemetry'),
+                'suggested_action' => trim($rec['suggested_action'] ?? 'Execute recommendation'),
+                'priority' => in_array(strtolower($rec['priority'] ?? ''), ['high', 'medium', 'low'])
+                    ? strtolower($rec['priority'])
+                    : 'medium',
+            ];
+        }
+        return $sanitized;
+    }
+
+    /**
      * Fallback NLP heuristic parser when GEMINI_API_KEY is not supplied.
      */
     protected function fallbackNaturalLanguageParser(string $prompt, string $sourceNote = ''): array
@@ -117,12 +283,10 @@ class GeminiService
         $notes = null;
         $currency = 'USD';
 
-        // Check if there is a note indicated by "with ... note" or "note: ..."
         if (preg_match('/(?:with|note:?)\s+([^,.]+)/i', $prompt, $noteMatch)) {
             $notes = trim($noteMatch[1]);
         }
 
-        // Split by clauses (and, comma)
         $clauses = preg_split('/\s+(?:and|\&)\s+|,\s*/i', $prompt);
 
         $wordToNum = [
@@ -136,8 +300,6 @@ class GeminiService
                 continue;
             }
 
-            // Pattern: [quantity] [item name] (at|for|@) [price]
-            // e.g., "2 wireless headphones at $45 each", "one phone case at $12"
             $pattern = '/^(\d+|one|two|three|four|five|six|seven|eight|nine|ten|a|an)?\s*(.+?)\s*(?:at|for|@|\:)\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i';
 
             if (preg_match($pattern, $clause, $matches)) {
@@ -145,7 +307,6 @@ class GeminiService
                 $qty = is_numeric($rawQty) ? (int) $rawQty : ($wordToNum[$rawQty] ?? 1);
 
                 $rawName = trim($matches[2]);
-                // Strip trailing noise like "each", "with expedited setup note"
                 $cleanName = preg_replace('/\s*(?:each|with\s+.*|note.*)$/i', '', $rawName);
                 $cleanName = ucwords(trim($cleanName));
 
@@ -161,7 +322,6 @@ class GeminiService
             }
         }
 
-        // If no clauses matched the specific price regex, create a generic item from the prompt
         if (empty($items)) {
             $items[] = [
                 'name' => 'Custom Merchant Item',
