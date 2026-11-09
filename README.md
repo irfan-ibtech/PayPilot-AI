@@ -1,32 +1,35 @@
 # PayPilot AI 🚀
-### Autonomous Merchant Commerce Loop, PayPal v2 Verification & AI Copilot
+### Enterprise AI Revenue Recovery, Autonomous Commerce & PayPal v2 Settlement Platform
 
 [![PayPal REST API](https://img.shields.io/badge/PayPal-REST%20API%20v2-003087?style=for-the-badge&logo=paypal&logoColor=white)](https://developer.paypal.com/)
-[![Google Gemini](https://img.shields.io/badge/Google%20Gemini-1.5%20Flash%20%7C%202.5-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
+[![Google Gemini](https://img.shields.io/badge/Google%20Gemini-2.5%20Flash-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
 [![Laravel](https://img.shields.io/badge/Laravel-12.x-FF2D20?style=for-the-badge&logo=laravel&logoColor=white)](https://laravel.com/)
 [![React](https://img.shields.io/badge/React-19.x%20TypeScript-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4.x-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
 **PayPal AI Hackathon 2026 Submission**  
-**Repository:** [https://github.com/irfan-ibtech/PayPilot-AI.git](https://github.com/irfan-ibtech/PayPilot-AI.git)
+**Repository:** [https://github.com/irfan-ibtech/PayPilot-AI.git](https://github.com/irfan-ibtech/PayPilot-AI.git)  
+**Security & Architecture Audit Report:** [AUDIT_REPORT.md](AUDIT_REPORT.md)
 
 ---
 
 ## 📌 Executive Summary
 
-Modern small-to-medium business (SMB) merchants operate in fragmented payment silos: manual quote generation leads to checkout abandonment, invoices are prone to human calculation errors, payment gateways operate disconnected from store intelligence, and business owners lack dedicated CFO-level insights to act upon their store transaction history.
+Every year, global e-commerce merchants lose **over \$18 billion to checkout abandonment, transient payment authorization drops, and unrecovered cart friction**. Traditional cart recovery relies on generic spam emails, while store payment workflows operate disconnected from real-time financial telemetry.
 
-**PayPilot AI** closes this gap by introducing an autonomous closed-loop commerce operating system:
-1. **Natural Language Order Creation:** Merchants describe orders in plain English (e.g., *"2 wireless headphones at $45 each and one phone case at $12"*).
-2. **Zero-Trust Pricing Recalculation:** The PHP backend engine rejects AI mathematical claims, strictly recalculating subtotals, quantities, and line items server-side to guarantee zero financial tampering.
-3. **Instant PayPal v2 Checkout:** Generates PayPal Orders API v2 transactions, dynamically loads official PayPal Checkout buttons, and captures authorizations.
-4. **Server-Side Anti-Tampering Verification:** Validates capture statuses, idempotency, and cryptographic amount/currency alignment prior to state settlement.
-5. **Deterministic Financial Analytics & Gemini Copilot:** Ingests settled telemetry into a deterministic analytics engine and feeds ground-truth metrics into Google Gemini to provide executive CFO diagnostics and autonomous revenue recommendations.
+**PayPilot AI** revolutionizes SMB and enterprise commerce by deploying an **Autonomous, Approval-Governed AI Revenue Recovery Agent** coupled with an end-to-end, zero-trust commerce operating system:
+
+1. **AI Natural Language Order Assistant:** Parse messy merchant quotes and verbal descriptions into structured line items using Gemini 2.5 Flash.
+2. **Catalog-Enforced Zero-Trust Pricing:** LLM mathematical output is never trusted. Prices are resolved strictly against merchant database catalogs, and all subtotals/totals are calculated via BCMath arbitrary precision (`scale = 2`).
+3. **Instant PayPal REST API v2 Checkout:** Native integration with PayPal Orders v2 with multi-attempt ledger history and upstream `PayPal-Request-Id` idempotency.
+4. **Pessimistic Concurrency & Anti-Tampering Engine:** Database transactions lock rows (`lockForUpdate()`) to prevent race conditions across webhooks, user retries, and AI automated captures. Captured values and currencies are mathematically verified before settlement.
+5. **AI Revenue Recovery Agent & Scoring Engine:** Continuously scans checkout drop-offs, calculates deterministic recovery scores (0–100), performs root-cause diagnostics, drafts personalized outreach copy, and launches 1-click PayPal recovery checkouts under strict merchant approval.
+6. **Deterministic Financial Analytics & Gemini Copilot:** Ingests settled telemetry into a deterministic analytics engine to provide ground-truth CFO dashboards and executive recommendations.
 
 ---
 
-## 🏗️ System Architecture
+## 🏗️ System Architecture & Workflow Topology
 
 ### 1. High-Level Component Topology
 
@@ -34,119 +37,183 @@ Modern small-to-medium business (SMB) merchants operate in fragmented payment si
 flowchart TD
     subgraph Client ["Client Layer (React 19 + TypeScript + Vite)"]
         UI["PayPilot Web Application"]
+        REC_UI["Revenue Recovery Workspace"]
         PP_SDK["@paypal/react-paypal-js SDK"]
-        STATE["Auth & Telemetry Context"]
     end
 
-    subgraph Backend ["Backend API Engine (Laravel 12 + Sanctum)"]
-        AUTH["Sanctum Auth Controller"]
-        ORD_CTRL["Zero-Trust Order Engine"]
-        PAY_CTRL["PayPal Verification Engine"]
-        ANALYTICS["Deterministic Analytics Service"]
-        GEMINI_SVC["Gemini NLP & Copilot Service"]
+    subgraph Backend ["Hardened Backend API Engine (Laravel 12)"]
+        AUTH["Sanctum Auth Engine"]
+        ORD_CTRL["Zero-Trust Order Engine (Catalog Verified)"]
+        PAY_CTRL["PayPal Verification Engine (Pessimistic Lock)"]
+        REC_AGENT["AI Revenue Recovery Agent Service"]
+        ANALYTICS["Deterministic Analytics Service (BCMath)"]
+        GEMINI_SVC["Gemini 2.5 Flash Service (Timeouts & Sanitization)"]
+        MONEY["BCMath Money Precision Helper"]
     end
 
-    subgraph ExternalAPIs ["External Cloud Services"]
+    subgraph ExternalAPIs ["External Cloud Infrastructure"]
         PAYPAL["PayPal REST API v2 (Orders & Captures)"]
-        GEMINI["Google Gemini API (1.5 Flash / 2.5)"]
+        GEMINI["Google Gemini API (gemini-2.5-flash)"]
     end
 
-    subgraph Database ["Persistent Storage Layer (MySQL 8.0)"]
-        DB[("paypilot_ai Database")]
+    subgraph Database ["Persistent Database (MySQL 8.0)"]
+        DB_ORDERS[("orders")]
+        DB_PAYMENTS[("payments (Multi-Attempt Ledger)")]
+        DB_RECOVERY[("recovery_opportunities")]
+        DB_PRODUCTS[("products (Source of Truth)")]
     end
 
     UI --> AUTH
     UI --> ORD_CTRL
     UI --> PAY_CTRL
-    UI --> ANALYTICS
+    REC_UI --> REC_AGENT
     PP_SDK --> PAY_CTRL
 
-    ORD_CTRL --> GEMINI_SVC
-    ORD_CTRL --> DB
+    ORD_CTRL --> DB_PRODUCTS
+    ORD_CTRL --> MONEY
+    ORD_CTRL --> DB_ORDERS
+
+    REC_AGENT --> GEMINI_SVC
+    REC_AGENT --> DB_RECOVERY
+    REC_AGENT --> DB_ORDERS
+
     PAY_CTRL --> PAYPAL
-    PAY_CTRL --> DB
-    ANALYTICS --> DB
+    PAY_CTRL --> DB_PAYMENTS
+    PAY_CTRL --> DB_ORDERS
+    PAY_CTRL --> DB_RECOVERY
+
     GEMINI_SVC --> GEMINI
-    GEMINI_SVC --> DB
+    ANALYTICS --> DB_ORDERS
+    ANALYTICS --> DB_PAYMENTS
 ```
 
 ---
 
-### 2. Zero-Trust Order Extraction & PayPal Capture Sequence
+### 2. AI Revenue Recovery State Machine & PayPal Reconciliation Loop
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Merchant as Merchant
-    participant React as PayPilot Frontend
-    participant API as Laravel 12 Backend
-    participant Gemini as Gemini AI API
+    participant React as Recovery Workspace
+    participant Agent as RecoveryAgentService
+    participant Gemini as Gemini 2.5 Flash
     participant PayPal as PayPal Orders API v2
-    participant DB as MySQL Database
+    participant DB as Database (Pessimistic Lock)
 
-    Merchant->>React: Enters natural language order ("2 headphones at $45 each...")
-    React->>API: POST /api/ai/parse-order { prompt }
-    API->>Gemini: Structured prompt extraction (temperature: 0.1, response_mime_type: JSON)
-    Gemini-->>API: Extracted raw items, quantities, unit prices
-    Note over API: Zero-Trust Recalculation Engine:<br/>Rejects AI math. Bounds quantities to integers & recalculates line totals strictly on server.
-    API-->>React: Preview draft with verified totals ($102.00)
-    Merchant->>React: Reviews & clicks "Confirm & Launch PayPal Checkout"
-    React->>API: POST /api/ai/confirm-order { verified items }
-    API->>DB: Stores Order (status: PENDING) & OrderItems
-    API-->>React: Created Order (#PP-XXXXXXXX)
-    React->>API: POST /api/payments/paypal/{orderId}/create
-    API->>PayPal: POST /v2/checkout/orders (intent: CAPTURE, amount: $102.00)
-    PayPal-->>API: Returns PayPal Order ID
-    API->>DB: Stores Payment record (status: CREATED)
-    API-->>React: Returns PayPal Order ID to SDK
-    React->>Merchant: Displays PayPal SDK Modal
-    Merchant->>PayPal: Approves payment in PayPal checkout
-    PayPal-->>React: Authorization completed (orderID)
-    React->>API: POST /api/payments/paypal/capture { paypal_order_id }
-    API->>PayPal: POST /v2/checkout/orders/{id}/capture
-    PayPal-->>API: Capture response (status: COMPLETED, captured amount)
-    Note over API: Anti-Tamper Verification:<br/>Checks status == COMPLETED, verifies captured amount & currency match local DB.
-    API->>DB: DB Transaction: Payment (COMPLETED), Order (PAID)
-    API-->>React: { success: true, verified payment }
-    React->>Merchant: Displays verified capture ID & updates Dashboard
+    Merchant->>React: Clicks "Run Recovery Scan"
+    React->>Agent: POST /api/recovery/scan
+    Agent->>DB: Queries unrecovered PENDING / FAILED orders
+    loop For Each Drop-off
+        Agent->>Agent: Evaluates recency, cart size, attempt history -> Score (0-100)
+        Agent->>Gemini: Diagnostic prompt (root cause, strategy, copy draft)
+        Gemini-->>Agent: Structured JSON diagnostic & message draft
+        Agent->>DB: Stores RecoveryOpportunity (status: PENDING)
+    end
+    Agent-->>React: Pipeline refreshed with scored opportunities
+    Merchant->>React: Reviews AI root-cause diagnostic & edits outreach message
+    Merchant->>React: Clicks "Approve Recovery Strategy"
+    React->>Agent: POST /api/recovery/opportunities/{id}/approve
+    Agent->>DB: Updates status: APPROVED, records audit trail
+    Merchant->>React: Clicks "Launch 1-Click PayPal Recovery Checkout"
+    React->>Agent: POST /api/recovery/opportunities/{id}/checkout
+    Agent->>PayPal: POST /v2/checkout/orders (PayPal-Request-Id: deterministic)
+    PayPal-->>Agent: Created PayPal Order ID
+    Agent->>DB: Creates Payment (is_recovery_attempt: true, attempt_number: N)
+    Agent->>DB: Transitions Opportunity status: IN_FLIGHT
+    Agent-->>React: Launches PayPal Checkout Modal
+    Merchant->>PayPal: Authorizes payment in PayPal Sandbox
+    PayPal-->>React: Captured authorization token
+    React->>Agent: POST /api/payments/paypal/capture
+    Note over Agent,DB: Pessimistic Lock (lockForUpdate) on Order & Payment<br/>Cryptographic BCMath amount & currency verification
+    Agent->>DB: DB Transaction: Payment (COMPLETED), Order (PAID)
+    Agent->>DB: Auto-Reconciles RecoveryOpportunity: status = RECOVERED
+    Agent-->>React: Confirmed Settlement Response
+    React->>Merchant: Displays Live Verification Badge & Updates Recovered KPI
 ```
 
 ---
 
-## 🔒 Zero-Trust Security & Pricing Architecture
+## 🔒 Enterprise Fintech Hardening & Security Guarantees
 
-Financial systems interacting with Large Language Models face critical vulnerabilities if AI output is treated as authoritative. PayPilot AI implements a strict **Zero-Trust Financial Architecture**:
+PayPilot AI was engineered under strict fintech security standards, eliminating typical floating-point drift and AI hallucination attack vectors:
 
-1. **Client & AI Output Rejection:** The backend never trusts a price, subtotal, or total generated by the client or Gemini. When Gemini extracts order items, the PHP backend forces all quantities into bounded integers ($\ge 1$), rounds unit prices to 2 decimal places, and executes `line_total = round($quantity * $unit_price, 2)`.
-2. **Server-Side Subtotal & Total Computation:** The `subtotal` and `total` stored in the database and submitted to PayPal are computed exclusively in PHP inside an atomic database transaction.
-3. **Idempotency Guards:** The `POST /api/payments/paypal/capture` endpoint guards against replay attacks or double-capture attempts by querying existing payment states; completed payments return the verified record without issuing duplicate capture calls.
-4. **Anti-Tampering Capture Verification:** When PayPal responds to a capture call, PayPilot inspects the capture payload:
-   $$\left| \text{Captured Amount} - \text{Expected DB Total} \right| \le 0.01 \quad \land \quad \text{Captured Currency} \equiv \text{Expected Currency}$$
-   If any discrepancy exists (e.g. an altered checkout payload or currency spoof), the transaction status is marked `FAILED` with an audit record, and the order is withheld.
-5. **Credential Isolation:** The frontend dynamically queries `GET /api/payments/paypal/client-id` to initialize the `@paypal/react-paypal-js` SDK. `PAYPAL_CLIENT_SECRET` is never exposed to the client.
+### 1. Arbitrary Precision Financial Calculations (`App\Support\Money`)
+IEEE 754 floating-point numbers cannot accurately represent decimal fractions. PayPilot replaces all native float casting and `round()` operations with an immutable BCMath wrapper `Money.php` enforcing scale 2:
+- Subtotals, line totals, and fees: `bcadd`, `bcsub`, `bcmul`, `bcdiv`.
+- Comparisons: `Money::equals($capturedAmount, $orderTotal)` uses `bccomp` with exact zero tolerance ($0.00$).
+
+### 2. Multi-Attempt Ledger & Upstream Idempotency
+- **Multi-Attempt History:** When checkouts fail or are retried, previous payment records are preserved with `attempt_number`, `idempotency_key`, `failure_reason`, and `is_recovery_attempt`.
+- **`PayPal-Request-Id` Injection:** Every outbound order creation and capture request to PayPal generates a unique, deterministic request ID to prevent duplicate transactions on PayPal's ledger.
+
+### 3. Concurrency Protection (`lockForUpdate()`)
+Payment capture requests in `PaymentController::capturePayPalOrder` are wrapped within database transactions that acquire pessimistic row locks on both `Payment` and `Order` models before inspecting status or issuing captures. This prevents race conditions between double-clicks, webhooks, and background recovery jobs.
+
+### 4. Catalog Price Binding in Natural Language Order Parsing
+When extracting orders from natural language, `AIOrderController::parse()` matches extracted names against the merchant's authenticated `Product` catalog. If matched, the price is pulled directly from `products.unit_price`, binding `product_id` and setting `catalog_matched: true`. Prompt injection attacks attempting to purchase items for \$0.01 are neutralized.
+
+### 5. Gemini 2.5 Flash Upgrade & Robust Timeouts
+- Uses Google's latest `gemini-2.5-flash` model for higher inference reasoning and strict JSON schema adherence.
+- Outbound requests feature strict HTTP timeouts (`timeout: 15s`, `connectTimeout: 5s`).
+- Prompts are automatically sanitized to neutralize prompt injection vectors.
 
 ---
 
-## ⚡ Key Features
+## ⚡ Key Modules & Features
 
-- **Natural Language Order Creation:** Turn loose conversations, WhatsApp chats, or verbal quotes into clean invoices instantly.
-- **Integrated PayPal Checkout:** Embedded `<PayPalButtons>` with real-time popup authorization and seamless sandbox support.
-- **Deterministic Analytics Engine:** Accurate SQL aggregates for Verified Gross Revenue, Order Conversion Rate, Average Order Value (AOV), and 7-day time series.
-- **Gemini CFO Copilot:** Conversational executive advisor grounded in store transaction metrics, producing categorized recommendations (`high`, `medium`, `low` priority).
-- **Persistent Recommendations:** High-impact business actions (e.g., cart recovery paylinks, product bundles) automatically saved to `business_recommendations` for tracking.
+- **Revenue Recovery Workspace (`/recovery`):**
+  - KPI Ribbon: Recoverable Revenue, Captured Recoveries, Pending Review, Recovery Win Rate.
+  - Split-pane interface: Pipeline Queue on the left, Diagnostic & Inspector on the right.
+  - Deterministic 0–100 scoring engine with color-coded priority badges (`critical`, `high`, `medium`, `low`).
+  - AI Root Cause Analysis & Behavioral Reasoning.
+  - Zero-Trust Customer Message Draft with 1-click clipboard copy.
+  - Approval state machine (`PENDING` -> `APPROVED` -> `IN_FLIGHT` -> `RECOVERED` / `REJECTED`).
+  - Immutable audit trail tracking every actor and state transition.
+- **AI Order Assistant (`/assistant`):**
+  - Natural-language quote parsing into structured baskets.
+  - Catalog price verification tags.
+  - Server-side zero-trust price recalculation.
+  - 1-click PayPal checkout launch.
+- **Deterministic Analytics & CFO Copilot (`/dashboard` & `/copilot`):**
+  - Live vs Demo Seed telemetry badges.
+  - Verified revenue, average order value, conversion rates, and 7-day volume charts.
+  - Conversational business copilot grounded in store transaction telemetry.
 
 ---
 
-## 🛠️ Tech Stack
+## 🧪 Automated Security Regression Suite
 
-| Layer | Technologies |
-|---|---|
-| **Backend API** | PHP 8.4+, Laravel 12, Laravel Sanctum, Guzzle/Http |
-| **Database** | MySQL 8.0 (InnoDB, utf8mb4) |
-| **Payment Engine** | PayPal REST API v2 (`/v1/oauth2/token`, `/v2/checkout/orders`, `/capture`) |
-| **Artificial Intelligence** | Google Gemini API (`gemini-1.5-flash` / `gemini-2.5-flash`) |
-| **Frontend SPA** | React 19, TypeScript, Vite, Tailwind CSS v4, Lucide Icons, Recharts |
-| **PayPal SDK** | `@paypal/react-paypal-js` |
+PayPilot AI includes a comprehensive automated test suite with **100% pass rate** covering payment security, idempotency, and the revenue recovery agent lifecycle:
+
+```bash
+cd backend
+php artisan test
+```
+
+### Test Suite Summary:
+```
+ PASS  Tests\Feature\ExampleTest
+ ✓ it returns a successful response
+
+ PASS  Tests\Feature\PaymentSecurityTest
+ ✓ rejects tampered or mismatched payment amount on capture
+ ✓ idempotent capture returns cached success without duplicate processing
+ ✓ multi attempt ledger increments attempt number and records idempotency key
+ ✓ tenant isolation prevents capturing another merchant order
+ ✓ ai order catalog price resolution overrides untrusted prompt prices
+
+ PASS  Tests\Feature\RecoveryAgentTest
+ ✓ scan identifies unrecovered dropoffs and scores recovery potential
+ ✓ merchant can approve opportunity and record audit trail
+ ✓ merchant can reject opportunity
+ ✓ launch recovery checkout creates paypal order with recovery flag
+ ✓ capturing paypal order reconciles active recovery opportunity to recovered
+ ✓ recovery metrics endpoint aggregates deterministic pipeline totals
+
+Tests:    13 passed (75 assertions)
+Duration: 0.16s
+```
 
 ---
 
@@ -156,7 +223,7 @@ Financial systems interacting with Large Language Models face critical vulnerabi
 - **PHP 8.2+** with extensions: `pdo_mysql`, `curl`, `mbstring`, `openssl`, `bcmath`
 - **Composer 2.x**
 - **Node.js 18+** & **npm**
-- **MySQL 8.0+** (Running natively on port `3306` or via MAMP on port `8889`)
+- **MySQL 8.0+** (Native on port `3306` or via MAMP on port `8889`)
 
 ---
 
@@ -170,7 +237,7 @@ cd PayPilot-AI
 
 ### Step 2: Configure & Run Backend
 
-1. Navigate to backend directory and install PHP packages:
+1. Navigate to backend directory and install dependencies:
    ```bash
    cd backend
    composer install
@@ -190,7 +257,7 @@ cd PayPilot-AI
 
    DB_CONNECTION=mysql
    DB_HOST=127.0.0.1
-   DB_PORT=8889              # Or 3306 depending on your local MySQL setup
+   DB_PORT=8889              # Or 3306 depending on your MySQL setup
    DB_DATABASE=paypilot_ai
    DB_USERNAME=root
    DB_PASSWORD=root
@@ -204,18 +271,18 @@ cd PayPilot-AI
 
    # Google Gemini API Key
    GEMINI_API_KEY=your_gemini_api_key
-   GEMINI_MODEL=gemini-1.5-flash
+   GEMINI_MODEL=gemini-2.5-flash
    ```
 
-4. Create database and run migrations with seeders:
+4. Run migrations and database seeder:
    ```bash
-   # Ensure database 'paypilot_ai' exists, then run:
    php artisan migrate:fresh --seed
    ```
-   *Seeder automatically creates:*
+   *Seeder automatically provisions:*
    - Demo Merchant: `demo@paypilot.ai` / `password123`
-   - 5 catalog items (Headphones, Keyboards, Hubs, Cases, Mousepads)
-   - 12 realistic orders spread across 7 days (8 `PAID`, 3 `PENDING`, 1 `FAILED`) with PayPal telemetry.
+   - 5 catalog items
+   - Historical orders and telemetry (tagged `is_demo_seed = true`)
+   - Initial AI Revenue Recovery opportunities ready for immediate inspection.
 
 5. Start the backend development server:
    ```bash
@@ -226,7 +293,7 @@ cd PayPilot-AI
 
 ### Step 3: Configure & Run Frontend
 
-1. In a new terminal window, navigate to `frontend/`:
+1. In a separate terminal, navigate to `frontend/`:
    ```bash
    cd frontend
    npm install
@@ -245,42 +312,13 @@ cd PayPilot-AI
 
 ---
 
-## 🧪 Testing the API via curl
+## 📹 Hackathon & Devpost Submission Details
 
-### 1. Merchant Authentication
-```bash
-TOKEN=$(curl -s -X POST http://127.0.0.1:8000/api/login \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -d '{"email":"demo@paypilot.ai","password":"password123"}' | grep -o '"token":"[^"]*' | cut -d'"' -f4)
-echo "Auth Token: $TOKEN"
-```
-
-### 2. Natural Language Order Extraction & Zero-Trust Calculation
-```bash
-curl -X POST http://127.0.0.1:8000/api/ai/parse-order \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -d '{"prompt":"2 wireless headphones at $45 each and one phone case at $12"}'
-```
-
-### 3. Consult AI Copilot with Store Metrics
-```bash
-curl -X POST http://127.0.0.1:8000/api/ai/copilot/ask \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -d '{"question":"Analyze my sales performance and recommend three actions to improve revenue."}'
-```
-
----
-
-## 📹 Demo Video & Devpost Information
-
-- **Devpost Submission:** PayPal AI Hackathon 2026
-- **Live Demo Video:** *[Insert YouTube / Loom Video Link]*
-- **Author & Lead Engineer:** Muhammad Irfan Bashir ([@irfan-ibtech](https://github.com/irfan-ibtech))
+- **Hackathon:** PayPal AI Hackathon 2026
+- **Category:** Autonomous AI Agents & Intelligent Merchant Payment Solutions
+- **Lead Architect & Engineer:** Muhammad Irfan Bashir ([@irfan-ibtech](https://github.com/irfan-ibtech))
+- **Audit Documentation:** [AUDIT_REPORT.md](AUDIT_REPORT.md)
+- **Status Dashboard:** [PROJECT_STATUS.md](PROJECT_STATUS.md)
 
 ---
 
