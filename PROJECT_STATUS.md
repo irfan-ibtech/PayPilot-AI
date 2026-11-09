@@ -47,6 +47,29 @@ PayPilot AI was engineered for the **PayPal AI Hackathon 2026** as an enterprise
 
 ---
 
+## 🏆 Verified Human-Approved PayPal Recovery Payment Lifecycle
+
+A live human-approved PayPal Sandbox recovery transaction has been completed and verified end-to-end:
+
+| Attribute | Verified Value | Evidence Source |
+|---|---|---|
+| **Local Order Number** | `#PP-75OQ3JVZ` (ID: 23) | Database `orders` table (Status: `PAID`, Total: `$69.00 USD`) |
+| **Recovery Opportunity** | ID: `#8` | Database `recovery_opportunities` (Status: `RECOVERED`, Score: `98`) |
+| **Initial Failed Attempt** | Payment ID: `26` (Order `9X453595V39312814`) | Database `payments` table (Status: `FAILED`, Error: HTTP 422) |
+| **Recovery Strategy** | `FRESH_CHECKOUT` | AI Diagnostic via Gemini 3.1 Flash Lite (Confidence: `85%`) |
+| **Merchant Approval Gate** | Verified | Enforced via `POST /recovery/opportunities/8/approve` |
+| **PayPal Recovery Order** | `8UX81126AK7595001` | PayPal REST API v2 (`POST /v2/checkout/orders`, Intent: `CAPTURE`) |
+| **Buyer Approval** | Completed by Human Operator | Personal Sandbox Account (`sb-9krbq53803137@personal.example.com`) |
+| **PayPal Capture ID** | `3FL64688SL0637948` | Verified via `GET /v2/payments/captures/3FL64688SL0637948` (HTTP 200 `COMPLETED`) |
+| **Settlement Amount** | Gross: `$69.00 USD`, Net: `$66.35 USD` (`₱4,092.96 PHP`) | PayPal Core Settlement Engine |
+| **Payee Merchant** | `AVPLZGAPLPXJG` (`sb-bkjtd53811564@business.example.com`) | PayPal REST API Response (`payee.merchant_id`) |
+| **Revenue Accounting** | Genuine Recovered Revenue: `$69.00` | Local Database (`is_simulated = false`, zero duplicate counting) |
+
+> [!NOTE]
+> **Normal Checkout Distinction:** The human operator completed buyer approval on the **Recovery Checkout** flow. The **Normal Checkout** flow remains verified through API order creation, real-time inquiry, and pre-approval rejection (HTTP 422), with external capture kept separately categorized as pending human buyer approval.
+
+---
+
 ## 🧪 Verification & Test Results
 
 ### Test Execution Log (23 Tests, 113 Assertions):

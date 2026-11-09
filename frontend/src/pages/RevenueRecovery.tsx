@@ -915,7 +915,7 @@ export const RevenueRecovery: React.FC = () => {
                 <PaymentEventTimeline
                   events={events}
                   isLoading={loadingEvents}
-                  title="Immutable Payment & Recovery Event Stream"
+                  title="Application-Level Payment & Recovery Event Log"
                   emptyMessage="No payment lifecycle events recorded yet for this order."
                 />
               </div>
