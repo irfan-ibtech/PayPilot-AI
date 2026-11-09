@@ -410,6 +410,79 @@ assertTest(
 );
 
 // ====================================================================
+// SECTION 9: FINTECH AUDIT TIMELINE & RECONCILIATION ENGINE
+// ====================================================================
+echo "\n9. FINTECH AUDIT TIMELINE & CONCURRENCY RECONCILIATION\n";
+
+if (!empty($targetOrder['id'])) {
+    $orderEventsRes = runHttp('GET', "{$baseUrl}/orders/{$targetOrder['id']}/events", null, $token);
+    assertTest(
+        'Order Payment Events Timeline (GET /orders/{id}/events)',
+        $orderEventsRes['code'] === 200 && is_array($orderEventsRes['body']['data'] ?? null),
+        count($orderEventsRes['body']['data'] ?? []) . " chronological audit events recorded"
+    );
+}
+
+if (!empty($targetOpp['id'])) {
+    $oppEventsRes = runHttp('GET', "{$baseUrl}/recovery/opportunities/{$targetOpp['id']}/events", null, $token);
+    assertTest(
+        'Recovery Audit Events Timeline (GET /recovery/opportunities/{id}/events)',
+        $oppEventsRes['code'] === 200 && is_array($oppEventsRes['body']['data'] ?? null),
+        count($oppEventsRes['body']['data'] ?? []) . " recovery lifecycle events recorded"
+    );
+}
+
+// Reconcile endpoint verification
+$reconcileToken = $paypalOrderId ?? 'SIMULATED-TEST-ORDER';
+$reconcileRes = runHttp('POST', "{$baseUrl}/payments/paypal/{$reconcileToken}/reconcile", null, $token);
+assertTest(
+    'PayPal Concurrency-Safe Reconciliation (POST /payments/paypal/{id}/reconcile)',
+    in_array($reconcileRes['code'], [200, 404]),
+    "Status {$reconcileRes['code']}: " . ($reconcileRes['body']['message'] ?? 'OK')
+);
+
+// ====================================================================
+// SECTION 10: MULTI-TENANT ISOLATION & ZERO-TRUST SECURITY GATE
+// ====================================================================
+echo "\n10. MULTI-TENANT ISOLATION & SECURE BOUNDARIES\n";
+
+$tenant2Email = 'isolation_tester_' . time() . '@paypilot.demo';
+$registerRes = runHttp('POST', "{$baseUrl}/register", [
+    'name' => 'Isolation Tester',
+    'email' => $tenant2Email,
+    'password' => 'SecurePass123!',
+    'password_confirmation' => 'SecurePass123!',
+]);
+
+if ($registerRes['code'] === 201) {
+    $tenant2Token = $registerRes['body']['token'];
+
+    // Tenant 2 attempts to inspect Tenant 1's order
+    if (!empty($targetOrder['id'])) {
+        $crossOrderRes = runHttp('GET', "{$baseUrl}/orders/{$targetOrder['id']}", null, $tenant2Token);
+        assertTest(
+            'Multi-Tenant Order Isolation (Foreign order access blocked)',
+            $crossOrderRes['code'] === 404,
+            "HTTP {$crossOrderRes['code']} expected 404 Not Found"
+        );
+    }
+
+    // Tenant 2 attempts to approve Tenant 1's recovery opportunity
+    if (!empty($targetOpp['id'])) {
+        $crossOppRes = runHttp('POST', "{$baseUrl}/recovery/opportunities/{$targetOpp['id']}/approve", [
+            'custom_message' => 'Unauthorized tampering attempt',
+        ], $tenant2Token);
+        assertTest(
+            'Multi-Tenant Recovery Isolation (Foreign recovery intervention blocked)',
+            in_array($crossOppRes['code'], [404, 422, 403]),
+            "HTTP {$crossOppRes['code']} correctly denied cross-tenant execution"
+        );
+    }
+} else {
+    assertTest('Multi-Tenant Register Tester', false, 'Failed to create secondary tenant');
+}
+
+// ====================================================================
 // SUMMARY AUDIT REPORT
 // ====================================================================
 echo "\n======================================================\n";

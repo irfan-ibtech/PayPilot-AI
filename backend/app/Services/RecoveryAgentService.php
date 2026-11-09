@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\PaymentEvent;
 use App\Models\RecoveryOpportunity;
 use App\Support\Money;
 use Exception;
@@ -26,21 +27,49 @@ class RecoveryAgentService
      */
     public function scanOpportunities(int $userId): array
     {
-        // 1. Fetch unrecovered candidate orders
+        $cutoffTime = now()->subMinutes(15);
+
+        // Fetch candidate orders:
+        // Excludes healthy in-progress orders (< 15 mins old with no failed payments)
         $candidateOrders = Order::with(['items', 'payments'])
             ->where('user_id', $userId)
-            ->whereIn('status', ['PENDING', 'FAILED'])
+            ->where(function ($q) use ($cutoffTime) {
+                $q->where('status', 'FAILED')
+                  ->orWhere(function ($sub) use ($cutoffTime) {
+                      $sub->where('status', 'PENDING')
+                          ->where(function ($pendingSub) use ($cutoffTime) {
+                              $pendingSub->whereNotNull('checkout_abandoned_at')
+                                         ->orWhere('created_at', '<=', $cutoffTime)
+                                         ->orWhereHas('payments', function ($payQ) {
+                                             $payQ->where('status', 'FAILED');
+                                         });
+                          });
+                  });
+            })
             ->whereDoesntHave('recoveryOpportunities', function ($query) {
                 $query->whereIn('status', ['PENDING', 'APPROVED', 'IN_FLIGHT', 'RECOVERED']);
             })
             ->latest('created_at')
             ->get();
 
+        // Historical merchant recovery conversion rate (learned outcome signal)
+        $historicalTotal = RecoveryOpportunity::where('user_id', $userId)
+            ->whereIn('status', ['RECOVERED', 'REJECTED'])
+            ->count();
+        $historicalRecovered = RecoveryOpportunity::where('user_id', $userId)
+            ->where('status', 'RECOVERED')
+            ->count();
+        $merchantHistoricalRecoveryRate = $historicalTotal > 0
+            ? ($historicalRecovered / $historicalTotal) * 100
+            : null;
+
         $discovered = [];
 
         foreach ($candidateOrders as $order) {
             $payments = $order->payments;
-            $score = $this->calculateScore($order, $payments);
+            $strategyKey = $this->determineStrategy($order, $payments);
+            $scoreData = $this->calculateScore($order, $payments, $merchantHistoricalRecoveryRate);
+            $score = $scoreData['score'];
             $priority = $this->determinePriority($score);
 
             $lastPayment = $payments->last();
@@ -53,6 +82,8 @@ class RecoveryAgentService
                 'attempt_count' => $payments->count(),
                 'last_failure_reason' => $failureReason,
                 'is_multi_item' => $order->items->count() > 1,
+                'score_breakdown' => $scoreData['breakdown'],
+                'strategy' => $strategyKey,
             ];
 
             $itemsSummary = $order->items->map(fn($item) => "{$item->quantity}x {$item->product_name}")->join(', ');
@@ -79,7 +110,9 @@ class RecoveryAgentService
                 'latest_payment_id' => $lastPayment?->id,
                 'recovery_score' => $score,
                 'priority' => $priority,
+                'strategy_key' => $strategyKey,
                 'status' => 'PENDING',
+                'workflow_state' => 'AWAITING_MERCHANT_APPROVAL',
                 'failure_reason_summary' => $failureReason,
                 'eligibility_signals' => $signals,
                 'ai_summary' => $aiStrategy['ai_summary'],
@@ -92,10 +125,27 @@ class RecoveryAgentService
                         'action' => 'DISCOVERED',
                         'actor' => 'AI_RECOVERY_AGENT',
                         'timestamp' => now()->toIso8601String(),
-                        'details' => "Opportunity scored at {$score} ({$priority} priority) based on telemetry and cart intent.",
+                        'details' => "Opportunity scored at {$score} ({$priority} priority) with strategy {$strategyKey}.",
                     ],
                 ],
             ]);
+
+            PaymentEvent::log(
+                $userId,
+                $order->id,
+                'RECOVERY_DETECTED',
+                'AI_AGENT',
+                "AI Recovery Agent flagged Order #{$order->order_number} for recovery (Score: {$score}, Strategy: {$strategyKey}).",
+                [
+                    'score' => $score,
+                    'priority' => $priority,
+                    'strategy' => $strategyKey,
+                    'workflow_state' => 'AWAITING_MERCHANT_APPROVAL',
+                    'breakdown' => $scoreData['breakdown'],
+                ],
+                $lastPayment?->id,
+                $opportunity->id
+            );
 
             $discovered[] = $opportunity->load(['order.items', 'latestPayment']);
         }
@@ -104,43 +154,114 @@ class RecoveryAgentService
     }
 
     /**
-     * Deterministic scoring engine (0 - 100) evaluating cart intent and recovery probability.
+     * Determine permitted recovery strategy based on order state and failure forensics.
      */
-    public function calculateScore(Order $order, Collection $payments): int
+    public function determineStrategy(Order $order, Collection $payments): string
     {
-        $score = 50;
+        $lastPayment = $payments->last();
+        $reason = strtolower($lastPayment?->failure_reason ?? '');
+        $status = $lastPayment?->status ?? null;
 
-        // Factor 1: Recency
-        $hours = now()->diffInMinutes($order->created_at) / 60;
-        if ($hours <= 24) {
-            $score += 20;
-        } elseif ($hours <= 48) {
-            $score += 10;
+        if ($status === 'REQUIRES_RECONCILIATION') {
+            return 'RECONCILE_FIRST';
         }
 
-        // Factor 2: Cart Size (Sweet-spot conversion bandwidth)
+        if (str_contains($reason, 'fraud') ||
+            str_contains($reason, 'risk') ||
+            str_contains($reason, 'stolen') ||
+            str_contains($reason, 'do_not_honor') ||
+            str_contains($reason, 'closed')) {
+            return 'MERCHANT_REVIEW';
+        }
+
+        if (str_contains($reason, 'timeout') ||
+            str_contains($reason, 'network') ||
+            str_contains($reason, 'connection') ||
+            str_contains($reason, 'gateway') ||
+            str_contains($reason, '504') ||
+            str_contains($reason, '503')) {
+            return 'RETRY_TRANSIENT';
+        }
+
+        return 'FRESH_CHECKOUT';
+    }
+
+    /**
+     * Explainable Recovery Priority Scoring Engine (10 - 98 heuristic).
+     */
+    public function calculateScore(Order $order, Collection $payments, ?float $merchantHistoricalRecoveryRate = null): array
+    {
+        $base = 50;
+        $recencyAdjustment = 0;
+        $cartTierAdjustment = 0;
+        $attemptAdjustment = 0;
+        $historicalAdjustment = 0;
+
+        // Factor 1: Recency
+        $minutes = now()->diffInMinutes($order->created_at);
+        $hours = $minutes / 60;
+        if ($hours <= 2) {
+            $recencyAdjustment = 25;
+        } elseif ($hours <= 24) {
+            $recencyAdjustment = 15;
+        } elseif ($hours <= 48) {
+            $recencyAdjustment = 5;
+        } else {
+            $recencyAdjustment = -10;
+        }
+
+        // Factor 2: Cart size sweet-spot ($40 - $250)
         $total = (float) $order->total;
-        if ($total >= 40 && $total <= 350) {
-            $score += 15;
-        } elseif ($total > 350) {
-            $score += 10;
+        if ($total >= 40 && $total <= 250) {
+            $cartTierAdjustment = 15;
+        } elseif ($total > 250 && $total <= 600) {
+            $cartTierAdjustment = 10;
+        } elseif ($total < 40) {
+            $cartTierAdjustment = 5;
+        } else {
+            $cartTierAdjustment = 0;
         }
 
         // Factor 3: Payment attempts
         $attemptCount = $payments->count();
-        if ($attemptCount === 1) {
-            $score += 10; // Transient friction, high probability
-        } elseif ($attemptCount >= 3) {
-            $score -= 15; // Multiple declines, lower likelihood
+        if ($attemptCount === 0) {
+            $attemptAdjustment = 10;
+        } elseif ($attemptCount === 1) {
+            $attemptAdjustment = 10;
+        } elseif ($attemptCount === 2) {
+            $attemptAdjustment = 0;
+        } else {
+            $attemptAdjustment = -15;
         }
 
-        // Factor 4: Error reason
-        $lastReason = strtolower($payments->last()?->failure_reason ?? '');
-        if (str_contains($lastReason, 'timeout') || str_contains($lastReason, 'session') || str_contains($lastReason, 'abandoned')) {
-            $score += 5;
+        // Factor 4: Historical merchant recovery conversion rate (learned outcome signal)
+        if ($merchantHistoricalRecoveryRate !== null) {
+            if ($merchantHistoricalRecoveryRate >= 40.0) {
+                $historicalAdjustment = 10;
+            } elseif ($merchantHistoricalRecoveryRate >= 20.0) {
+                $historicalAdjustment = 5;
+            } elseif ($merchantHistoricalRecoveryRate < 10.0) {
+                $historicalAdjustment = -5;
+            }
         }
 
-        return max(10, min(98, $score));
+        $rawScore = $base + $recencyAdjustment + $cartTierAdjustment + $attemptAdjustment + $historicalAdjustment;
+        $finalScore = max(10, min(98, $rawScore));
+
+        return [
+            'score' => $finalScore,
+            'breakdown' => [
+                'base' => $base,
+                'recency_adjustment' => $recencyAdjustment,
+                'hours_elapsed' => round($hours, 1),
+                'cart_tier_adjustment' => $cartTierAdjustment,
+                'cart_total' => $order->total,
+                'attempt_history_adjustment' => $attemptAdjustment,
+                'attempt_count' => $attemptCount,
+                'historical_rate_adjustment' => $historicalAdjustment,
+                'merchant_historical_rate' => $merchantHistoricalRecoveryRate !== null ? round($merchantHistoricalRecoveryRate, 1) . '%' : 'N/A',
+            ],
+        ];
     }
 
     /**
@@ -184,10 +305,22 @@ class RecoveryAgentService
 
         $opportunity->update([
             'status' => 'APPROVED',
+            'workflow_state' => 'APPROVED',
             'approved_at' => now(),
             'customer_message_draft' => $customMessage ?: $opportunity->customer_message_draft,
             'audit_trail' => $audit,
         ]);
+
+        PaymentEvent::log(
+            $userId,
+            $opportunity->order_id,
+            'RECOVERY_APPROVED',
+            'MERCHANT_ACTION',
+            "Merchant approved recovery intervention for Order #{$opportunity->order?->order_number}.",
+            ['approved_strategy' => $opportunity->strategy_key],
+            $opportunity->latest_payment_id,
+            $opportunity->id
+        );
 
         return $opportunity->fresh(['order.items', 'latestPayment']);
     }
@@ -216,9 +349,21 @@ class RecoveryAgentService
 
         $opportunity->update([
             'status' => 'REJECTED',
+            'workflow_state' => 'DISMISSED',
             'rejected_at' => now(),
             'audit_trail' => $audit,
         ]);
+
+        PaymentEvent::log(
+            $userId,
+            $opportunity->order_id,
+            'RECOVERY_DISMISSED',
+            'MERCHANT_ACTION',
+            "Merchant dismissed recovery opportunity for Order #{$opportunity->order?->order_number}.",
+            ['reason' => $reason],
+            $opportunity->latest_payment_id,
+            $opportunity->id
+        );
 
         return $opportunity->fresh(['order.items', 'latestPayment']);
     }
@@ -262,7 +407,10 @@ class RecoveryAgentService
             'details' => "Re-analyzed via live AI diagnostic engine (" . ($aiStrategy['ai_source'] ?? 'gemini_live') . ").",
         ];
 
+        $strategyKey = $this->determineStrategy($order, $payments);
+
         $opportunity->update([
+            'strategy_key' => $strategyKey,
             'ai_summary' => $aiStrategy['ai_summary'],
             'ai_reasoning' => $aiStrategy['ai_reasoning'],
             'ai_recommended_action' => $aiStrategy['ai_recommended_action'],
@@ -270,6 +418,21 @@ class RecoveryAgentService
             'ai_confidence' => $aiStrategy['ai_confidence'],
             'audit_trail' => $audit,
         ]);
+
+        PaymentEvent::log(
+            $userId,
+            $order->id,
+            'RECOVERY_ANALYZED',
+            'AI_AGENT',
+            "Opportunity re-analyzed via live AI diagnostic engine (" . ($aiStrategy['ai_source'] ?? 'gemini_live') . ").",
+            [
+                'confidence' => $aiStrategy['ai_confidence'],
+                'recommended_action' => $aiStrategy['ai_recommended_action'],
+                'strategy' => $strategyKey,
+            ],
+            $lastPayment?->id,
+            $opportunity->id
+        );
 
         return $opportunity->fresh(['order.items', 'latestPayment']);
     }
@@ -327,9 +490,26 @@ class RecoveryAgentService
 
         $opportunity->update([
             'status' => 'IN_FLIGHT',
+            'workflow_state' => 'CHECKOUT_PREPARED',
             'latest_payment_id' => $payment->id,
             'audit_trail' => $audit,
         ]);
+
+        PaymentEvent::log(
+            $userId,
+            $order->id,
+            'RECOVERY_CHECKOUT_PREPARED',
+            'PAYPAL_API',
+            "Fresh PayPal recovery session {$paypalOrderId} prepared.",
+            [
+                'paypal_order_id' => $paypalOrderId,
+                'attempt_number' => $attemptNumber,
+                'amount' => Money::format($order->total),
+                'currency' => $order->currency,
+            ],
+            $payment->id,
+            $opportunity->id
+        );
 
         return [
             'opportunity' => $opportunity->fresh(['order.items', 'latestPayment']),

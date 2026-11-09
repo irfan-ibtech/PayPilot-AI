@@ -22,8 +22,9 @@ import {
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import api from '../services/api';
 import PayPalCheckoutModal from '../components/PayPalCheckoutModal';
+import { PaymentEventTimeline } from '../components/PaymentEventTimeline';
 import type { Order } from '../types/order';
-import type { RecoveryMetrics } from '../types/recovery';
+import type { RecoveryMetrics, PaymentEventItem } from '../types/recovery';
 
 interface TopProduct {
   product_name: string;
@@ -85,6 +86,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateCopilot, onNavig
 
   // Slide-over Order Inspector Drawer
   const [inspectingOrder, setInspectingOrder] = useState<Order | null>(null);
+  const [orderEvents, setOrderEvents] = useState<PaymentEventItem[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState<boolean>(false);
+
+  const loadOrderEvents = async (orderId: number) => {
+    setLoadingEvents(true);
+    try {
+      const res = await api.get(`/orders/${orderId}/events`);
+      setOrderEvents(res.data.data || []);
+    } catch (e) {
+      console.error('Failed to load order audit events', e);
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
+
+  useEffect(() => {
+    if (inspectingOrder?.id) {
+      loadOrderEvents(inspectingOrder.id);
+    } else {
+      setOrderEvents([]);
+    }
+  }, [inspectingOrder?.id]);
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -838,6 +861,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateCopilot, onNavig
                       ))}
                     </div>
                   )}
+                </div>
+
+                {/* Chronological Audit Event Timeline */}
+                <div className="pt-2">
+                  <PaymentEventTimeline
+                    events={orderEvents}
+                    isLoading={loadingEvents}
+                    title="Chronological Audit Timeline"
+                    emptyMessage="No audit events recorded for this order."
+                  />
                 </div>
               </div>
 

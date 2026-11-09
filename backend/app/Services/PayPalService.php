@@ -214,4 +214,48 @@ class PayPalService
             ],
         ];
     }
+
+    /**
+     * Inquire real-time order state from PayPal REST API for reconciliation.
+     */
+    public function getOrderDetails(string $paypalOrderId): array
+    {
+        if (str_starts_with($paypalOrderId, 'SIMULATED-') || str_starts_with($paypalOrderId, 'PP-SIM-')) {
+            return [
+                'id' => $paypalOrderId,
+                'status' => 'COMPLETED',
+                'purchase_units' => [
+                    [
+                        'payments' => [
+                            'captures' => [
+                                [
+                                    'id' => 'CAPTURE-SIM-' . strtoupper(bin2hex(random_bytes(6))),
+                                    'status' => 'COMPLETED',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ];
+        }
+
+        try {
+            $accessToken = $this->getAccessToken();
+            $response = Http::timeout(8)
+                ->withToken($accessToken)
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->get("{$this->baseUrl}/v2/checkout/orders/{$paypalOrderId}");
+
+            if ($response->successful()) {
+                return $response->json();
+            }
+        } catch (\Throwable $e) {
+            // fallback
+        }
+
+        return [
+            'id' => $paypalOrderId,
+            'status' => 'UNKNOWN',
+        ];
+    }
 }

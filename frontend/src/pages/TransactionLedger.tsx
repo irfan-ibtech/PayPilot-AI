@@ -14,6 +14,8 @@ import {
   FileCode,
   ShieldCheck,
 } from 'lucide-react';
+import { PaymentEventTimeline } from '../components/PaymentEventTimeline';
+import type { PaymentEventItem } from '../types/recovery';
 
 interface OrderItem {
   id: number;
@@ -65,6 +67,28 @@ export const TransactionLedger: React.FC = () => {
   // Inspector State
   const [selectedTx, setSelectedTx] = useState<PaymentTransaction | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [orderEvents, setOrderEvents] = useState<PaymentEventItem[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState<boolean>(false);
+
+  const loadTxEvents = async (orderId: number) => {
+    setLoadingEvents(true);
+    try {
+      const res = await api.get(`/orders/${orderId}/events`);
+      setOrderEvents(res.data.data || []);
+    } catch (e) {
+      console.error('Failed to load transaction audit events', e);
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedTx?.order_id) {
+      loadTxEvents(selectedTx.order_id);
+    } else {
+      setOrderEvents([]);
+    }
+  }, [selectedTx?.order_id]);
 
   const fetchTransactions = async () => {
     setLoading(true);
@@ -585,6 +609,16 @@ export const TransactionLedger: React.FC = () => {
                     </div>
                   </div>
                 )}
+
+                {/* Chronological Payment Lifecycle Events */}
+                <div className="pt-2">
+                  <PaymentEventTimeline
+                    events={orderEvents}
+                    isLoading={loadingEvents}
+                    title="Chronological Verification Lifecycle"
+                    emptyMessage="No audit events recorded for this transaction."
+                  />
+                </div>
 
                 {/* Raw PayPal Payload */}
                 <div className="space-y-2">

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\PaymentEvent;
 use App\Support\Money;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -90,6 +91,20 @@ class OrderController extends Controller
             return $newOrder->load(['items', 'payment']);
         });
 
+        PaymentEvent::log(
+            userId: $request->user()->id,
+            orderId: $order->id,
+            eventType: 'ORDER_CREATED',
+            source: 'MERCHANT_ACTION',
+            summary: "Order {$order->order_number} initiated for {$currency} {$total} with " . count($orderItemsData) . " item(s).",
+            payload: [
+                'subtotal' => $subtotal,
+                'total' => $total,
+                'currency' => $currency,
+                'item_count' => count($orderItemsData),
+            ]
+        );
+
         return response()->json([
             'message' => 'Order created successfully',
             'data' => $order,
@@ -108,6 +123,25 @@ class OrderController extends Controller
 
         return response()->json([
             'data' => $order,
+        ]);
+    }
+
+    /**
+     * Retrieve chronological payment audit events timeline for the order.
+     */
+    public function events(Request $request, $id): JsonResponse
+    {
+        $order = Order::where('user_id', $request->user()->id)
+            ->where('id', $id)
+            ->firstOrFail();
+
+        $events = $order->events()
+            ->orderBy('occurred_at', 'asc')
+            ->orderBy('id', 'asc')
+            ->get();
+
+        return response()->json([
+            'data' => $events,
         ]);
     }
 }

@@ -189,4 +189,22 @@ class RecoveryController extends Controller
             ], 400);
         }
     }
+
+    /**
+     * Retrieve chronological audit and payment events timeline for this opportunity.
+     */
+    public function events(Request $request, $id): JsonResponse
+    {
+        $opportunity = RecoveryOpportunity::where('user_id', $request->user()->id)
+            ->findOrFail($id);
+
+        $events = $opportunity->events()
+            ->orderBy('occurred_at', 'asc')
+            ->orderBy('id', 'asc')
+            ->get();
+
+        return response()->json([
+            'data' => $events,
+        ]);
+    }
 }

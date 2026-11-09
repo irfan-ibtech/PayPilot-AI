@@ -32,6 +32,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/orders', [OrderController::class, 'index']);
     Route::post('/orders', [OrderController::class, 'store']);
     Route::get('/orders/{id}', [OrderController::class, 'show']);
+    Route::get('/orders/{id}/events', [OrderController::class, 'events']);
 
     // AI Natural Language Order Extraction & Zero-Trust Engine
     Route::post('/ai/parse-order', [AIOrderController::class, 'parse']);
@@ -46,6 +47,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/payments/paypal/client-id', [PaymentController::class, 'getPayPalClientId']);
     Route::post('/payments/paypal/{orderId}/create', [PaymentController::class, 'createPayPalOrder']);
     Route::post('/payments/paypal/capture', [PaymentController::class, 'capturePayPalOrder']);
+    Route::post('/payments/paypal/{paypalOrderId}/reconcile', [PaymentController::class, 'reconcilePayment']);
     Route::get('/payments', [PaymentController::class, 'index']);
     Route::get('/payments/{payment}', [PaymentController::class, 'show']);
 
@@ -54,6 +56,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/recovery/opportunities', [RecoveryController::class, 'index']);
     Route::post('/recovery/scan', [RecoveryController::class, 'scan']);
     Route::get('/recovery/opportunities/{id}', [RecoveryController::class, 'show']);
+    Route::get('/recovery/opportunities/{id}/events', [RecoveryController::class, 'events']);
     Route::post('/recovery/opportunities/{id}/analyze', [RecoveryController::class, 'analyze']);
     Route::post('/recovery/opportunities/{id}/approve', [RecoveryController::class, 'approve']);
     Route::post('/recovery/opportunities/{id}/reject', [RecoveryController::class, 'reject']);

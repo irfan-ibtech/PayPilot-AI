@@ -21,6 +21,7 @@ class Order extends Model
         'status',
         'notes',
         'is_demo_seed',
+        'checkout_abandoned_at',
     ];
 
     protected function casts(): array
@@ -29,6 +30,7 @@ class Order extends Model
             'subtotal' => 'decimal:2',
             'total' => 'decimal:2',
             'is_demo_seed' => 'boolean',
+            'checkout_abandoned_at' => 'datetime',
         ];
     }
 
@@ -65,5 +67,10 @@ class Order extends Model
     public function recoveryOpportunity(): HasOne
     {
         return $this->hasOne(RecoveryOpportunity::class)->latestOfMany();
+    }
+
+    public function events(): HasMany
+    {
+        return $this->hasMany(PaymentEvent::class)->orderBy('occurred_at', 'asc');
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Models\PaymentEvent;
 use App\Models\Product;
 use App\Services\GeminiService;
 use App\Support\Money;
@@ -49,13 +50,45 @@ class AIOrderController extends Controller
         foreach ($rawItems as $item) {
             $rawName = trim($item['name'] ?? 'Item');
             $quantity = max(1, (int) ($item['quantity'] ?? 1));
+            $rawLower = mb_strtolower($rawName);
 
-            // Case-insensitive match against merchant's actual product catalog
-            $matchedProduct = $merchantProducts->first(function ($prod) use ($rawName) {
-                return mb_strtolower($prod->name) === mb_strtolower($rawName)
-                    || str_contains(mb_strtolower($rawName), mb_strtolower($prod->name))
-                    || str_contains(mb_strtolower($prod->name), mb_strtolower($rawName));
+            // Tier 1: Exact SKU or exact product name match
+            $exactMatch = $merchantProducts->first(function ($prod) use ($rawLower) {
+                return mb_strtolower($prod->sku ?? '') === $rawLower
+                    || mb_strtolower($prod->name) === $rawLower;
             });
+
+            if ($exactMatch) {
+                $matchedProduct = $exactMatch;
+                $isAmbiguous = false;
+                $candidates = [];
+            } else {
+                // Tier 2: Substring or word matching, sorted by length descending to prefer specific matches
+                $matches = $merchantProducts->filter(function ($prod) use ($rawLower) {
+                    $prodNameLower = mb_strtolower($prod->name);
+                    return str_contains($rawLower, $prodNameLower)
+                        || str_contains($prodNameLower, $rawLower);
+                })->sortByDesc(fn($prod) => strlen($prod->name));
+
+                if ($matches->count() > 1) {
+                    $matchedProduct = $matches->first();
+                    $isAmbiguous = true;
+                    $candidates = $matches->map(fn($p) => [
+                        'id' => $p->id,
+                        'name' => $p->name,
+                        'sku' => $p->sku,
+                        'unit_price' => Money::format($p->unit_price),
+                    ])->values()->all();
+                } elseif ($matches->count() === 1) {
+                    $matchedProduct = $matches->first();
+                    $isAmbiguous = false;
+                    $candidates = [];
+                } else {
+                    $matchedProduct = null;
+                    $isAmbiguous = false;
+                    $candidates = [];
+                }
+            }
 
             $promptUnitPrice = isset($item['unit_price']) ? Money::format($item['unit_price']) : null;
 
@@ -82,6 +115,8 @@ class AIOrderController extends Controller
                 'line_total' => $lineTotal,
                 'product_id' => $productId,
                 'catalog_matched' => $catalogMatched,
+                'is_ambiguous' => $isAmbiguous,
+                'candidates' => $candidates,
             ];
         }
 
@@ -160,6 +195,21 @@ class AIOrderController extends Controller
 
             return $newOrder->load(['items', 'payment']);
         });
+
+        PaymentEvent::log(
+            userId: $request->user()->id,
+            orderId: $order->id,
+            eventType: 'ORDER_CREATED',
+            source: 'AI_AGENT',
+            summary: "AI-parsed draft confirmed by merchant as Order {$order->order_number} for {$currency} {$total} with " . count($orderItemsData) . " item(s).",
+            payload: [
+                'subtotal' => $subtotal,
+                'total' => $total,
+                'currency' => $currency,
+                'item_count' => count($orderItemsData),
+                'source' => 'AI_PARSER',
+            ]
+        );
 
         return response()->json([
             'message' => 'Order confirmed and created successfully',

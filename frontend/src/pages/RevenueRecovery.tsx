@@ -18,13 +18,17 @@ import {
   Mail,
   MessageSquare,
   Zap,
+  ChevronDown,
+  ChevronUp,
+  Info,
 } from 'lucide-react';
 import api from '../services/api';
-import type { RecoveryOpportunity, RecoveryMetrics, RecoveryStatus } from '../types/recovery';
+import type { RecoveryOpportunity, RecoveryMetrics, RecoveryStatus, PaymentEventItem } from '../types/recovery';
 import type { PaymentRecord } from '../types/order';
 import { PayPalCheckoutModal } from '../components/PayPalCheckoutModal';
+import { PaymentEventTimeline } from '../components/PaymentEventTimeline';
 
-const RadialScoreGauge: React.FC<{ score: number }> = ({ score }) => {
+const RadialScoreGauge: React.FC<{ score: number; label?: string }> = ({ score, label = 'Score' }) => {
   const radius = 34;
   const stroke = 5;
   const normalizedRadius = radius - stroke * 2;
@@ -58,7 +62,7 @@ const RadialScoreGauge: React.FC<{ score: number }> = ({ score }) => {
       </svg>
       <div className="absolute flex flex-col items-center justify-center">
         <span className="text-sm font-bold font-mono text-white tabular-nums">{score}</span>
-        <span className="text-[8px] uppercase tracking-wider text-slate-400 font-sans">Score</span>
+        <span className="text-[8px] uppercase tracking-wider text-slate-400 font-sans">{label}</span>
       </div>
     </div>
   );
@@ -82,8 +86,26 @@ export const RevenueRecovery: React.FC = () => {
   const [composerMode, setComposerMode] = useState<'email' | 'sms'>('email');
   const [copied, setCopied] = useState<boolean>(false);
 
+  // Audit timeline & score breakdown
+  const [events, setEvents] = useState<PaymentEventItem[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState<boolean>(false);
+  const [showScoreBreakdown, setShowScoreBreakdown] = useState<boolean>(false);
+  const [isReconciling, setIsReconciling] = useState<boolean>(false);
+
   // Checkout modal
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState<boolean>(false);
+
+  const loadEvents = async (oppId: number) => {
+    setLoadingEvents(true);
+    try {
+      const res = await api.get(`/recovery/opportunities/${oppId}/events`);
+      setEvents(res.data.data || []);
+    } catch (e) {
+      console.error('Failed to load opportunity events', e);
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
 
   // Fetch metrics and opportunities
   const loadData = async (statusFilter?: string) => {
@@ -125,8 +147,11 @@ export const RevenueRecovery: React.FC = () => {
   useEffect(() => {
     if (selectedOpportunity) {
       setEditedMessage(selectedOpportunity.customer_message_draft || '');
+      loadEvents(selectedOpportunity.id);
+    } else {
+      setEvents([]);
     }
-  }, [selectedOpportunity]);
+  }, [selectedOpportunity?.id]);
 
   // Run autonomous scan
   const handleScan = async () => {
@@ -218,6 +243,68 @@ export const RevenueRecovery: React.FC = () => {
     setIsCheckoutModalOpen(false);
     setActionSuccessMsg(`Payment captured successfully! PayPal Order: ${payment.paypal_order_id}`);
     await loadData(activeTab);
+    if (selectedOpportunity) {
+      await loadEvents(selectedOpportunity.id);
+    }
+  };
+
+  const handleReconcile = async () => {
+    const paypalId = selectedOpportunity?.latest_payment?.paypal_order_id;
+    if (!paypalId) return;
+    setIsReconciling(true);
+    setErrorMsg(null);
+    try {
+      const res = await api.post(`/payments/paypal/${paypalId}/reconcile`);
+      setActionSuccessMsg(res.data.message || 'Payment successfully reconciled with PayPal.');
+      await loadData(activeTab);
+      if (selectedOpportunity) {
+        await loadEvents(selectedOpportunity.id);
+      }
+    } catch (err: any) {
+      console.error('Reconcile failed', err);
+      setErrorMsg(err.response?.data?.message || 'PayPal reconciliation failed.');
+    } finally {
+      setIsReconciling(false);
+    }
+  };
+
+  const getStrategyBadge = (strategy?: string) => {
+    switch (strategy) {
+      case 'FRESH_CHECKOUT':
+        return (
+          <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 flex items-center gap-1">
+            <Zap className="h-3 w-3" />
+            Fresh Checkout Link
+          </span>
+        );
+      case 'RETRY_TRANSIENT':
+        return (
+          <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center gap-1">
+            <RefreshCw className="h-3 w-3" />
+            Transient Retry Safe
+          </span>
+        );
+      case 'MERCHANT_REVIEW':
+        return (
+          <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1">
+            <AlertCircle className="h-3 w-3" />
+            Merchant Review Required
+          </span>
+        );
+      case 'RECONCILE_FIRST':
+        return (
+          <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center gap-1">
+            <ShieldCheck className="h-3 w-3" />
+            Reconcile First
+          </span>
+        );
+      default:
+        return (
+          <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+            {strategy || 'Standard Recovery'}
+          </span>
+        );
+    }
   };
 
   const handleCopyMessage = () => {
@@ -488,17 +575,27 @@ export const RevenueRecovery: React.FC = () => {
               {/* Header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
                 <div className="flex items-center gap-4">
-                  <RadialScoreGauge score={selectedOpportunity.recovery_score} />
+                  <div
+                    className="cursor-pointer group relative"
+                    onClick={() => setShowScoreBreakdown(!showScoreBreakdown)}
+                    title="Click to view explainable scoring breakdown"
+                  >
+                    <RadialScoreGauge score={selectedOpportunity.recovery_score} label="Priority" />
+                  </div>
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <h2 className="text-xl font-bold text-white font-mono">
                         #{selectedOpportunity.order?.order_number}
                       </h2>
                       {getStatusBadge(selectedOpportunity.status)}
+                      {getStrategyBadge(selectedOpportunity.strategy_key)}
                     </div>
                     <p className="text-xs text-slate-400 mt-1">
-                      Cart Total: <span className="font-bold text-white font-mono">${selectedOpportunity.order?.total} {selectedOpportunity.order?.currency}</span> •
-                      Detected {selectedOpportunity.eligibility_signals?.hours_since_dropoff || 1} hours ago
+                      Cart Total:{' '}
+                      <span className="font-bold text-white font-mono">
+                        ${selectedOpportunity.order?.total} {selectedOpportunity.order?.currency}
+                      </span>{' '}
+                      • Detected {selectedOpportunity.eligibility_signals?.hours_since_dropoff || 1} hours ago
                     </p>
                   </div>
                 </div>
@@ -514,6 +611,60 @@ export const RevenueRecovery: React.FC = () => {
                     <span>{isReanalyzing ? 'Analyzing...' : 'Re-Analyze with Live Gemini'}</span>
                   </button>
                 </div>
+              </div>
+
+              {/* Recovery Priority Score Breakdown (Explainable Heuristics) */}
+              <div className="bg-slate-950/60 rounded-xl p-3 border border-slate-800">
+                <div
+                  className="flex items-center justify-between cursor-pointer"
+                  onClick={() => setShowScoreBreakdown(!showScoreBreakdown)}
+                >
+                  <div className="flex items-center gap-2">
+                    <Info className="w-4 h-4 text-indigo-400" />
+                    <span className="text-xs font-semibold text-slate-200">
+                      Recovery Priority Score: <span className="font-mono text-white">{selectedOpportunity.recovery_score}</span> / 100
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">(Explainable Telemetry Model)</span>
+                  </div>
+                  <button className="text-slate-400 hover:text-white transition">
+                    {showScoreBreakdown ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                {showScoreBreakdown && (
+                  <div className="mt-3 pt-3 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px] font-mono">
+                    <div className="p-2 rounded bg-slate-900 border border-slate-800">
+                      <span className="text-slate-500 block text-[9px] uppercase font-sans">Baseline</span>
+                      <span className="font-bold text-white">50 pts</span>
+                    </div>
+                    <div className="p-2 rounded bg-slate-900 border border-slate-800">
+                      <span className="text-slate-500 block text-[9px] uppercase font-sans">Recency Impact</span>
+                      <span className={`font-bold ${(selectedOpportunity.eligibility_signals?.score_breakdown?.recency_adjustment ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {(selectedOpportunity.eligibility_signals?.score_breakdown?.recency_adjustment ?? 0) >= 0 ? '+' : ''}
+                        {selectedOpportunity.eligibility_signals?.score_breakdown?.recency_adjustment ?? 15} pts
+                      </span>
+                    </div>
+                    <div className="p-2 rounded bg-slate-900 border border-slate-800">
+                      <span className="text-slate-500 block text-[9px] uppercase font-sans">Cart Size Tier</span>
+                      <span className="font-bold text-emerald-400">
+                        +{(selectedOpportunity.eligibility_signals?.score_breakdown?.cart_tier_adjustment ?? 15)} pts
+                      </span>
+                    </div>
+                    <div className="p-2 rounded bg-slate-900 border border-slate-800">
+                      <span className="text-slate-500 block text-[9px] uppercase font-sans">Attempt History</span>
+                      <span className={`font-bold ${(selectedOpportunity.eligibility_signals?.score_breakdown?.attempt_history_adjustment ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {(selectedOpportunity.eligibility_signals?.score_breakdown?.attempt_history_adjustment ?? 0) >= 0 ? '+' : ''}
+                        {selectedOpportunity.eligibility_signals?.score_breakdown?.attempt_history_adjustment ?? 10} pts
+                      </span>
+                    </div>
+                    <div className="p-2 rounded bg-slate-900 border border-slate-800">
+                      <span className="text-slate-500 block text-[9px] uppercase font-sans">Merchant Win Rate</span>
+                      <span className="font-bold text-indigo-400">
+                        {selectedOpportunity.eligibility_signals?.score_breakdown?.merchant_historical_rate || `${metrics?.recovery_rate || 0}%`}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* 4-Step Horizontal Lifecycle Stepper */}
@@ -734,6 +885,18 @@ export const RevenueRecovery: React.FC = () => {
                     </button>
                   )}
 
+                  {selectedOpportunity.latest_payment?.paypal_order_id && selectedOpportunity.status !== 'RECOVERED' && (
+                    <button
+                      onClick={handleReconcile}
+                      disabled={isReconciling}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-medium border border-cyan-800/40 transition disabled:opacity-50"
+                      title="Directly inspect PayPal REST API order capture status"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${isReconciling ? 'animate-spin' : ''}`} />
+                      <span>{isReconciling ? 'Verifying...' : 'Reconcile with PayPal'}</span>
+                    </button>
+                  )}
+
                   {selectedOpportunity.status === 'RECOVERED' && (
                     <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold bg-emerald-950/60 border border-emerald-800 px-3 py-1.5 rounded-xl">
                       <CheckCircle2 className="h-4 w-4" />
@@ -747,30 +910,15 @@ export const RevenueRecovery: React.FC = () => {
                 </div>
               </div>
 
-              {/* Audit Trail Timeline */}
-              {selectedOpportunity.audit_trail && selectedOpportunity.audit_trail.length > 0 && (
-                <div className="border-t border-slate-800 pt-4">
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">
-                    Immutable Audit Trail
-                  </span>
-                  <div className="space-y-2 text-xs">
-                    {selectedOpportunity.audit_trail.map((log, idx) => (
-                      <div key={idx} className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/60 text-slate-400">
-                        <div className="h-2 w-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between">
-                            <span className="font-semibold text-slate-300 font-mono text-[11px]">{log.action}</span>
-                            <span className="text-[10px] text-slate-500 font-mono">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                          </div>
-                          <p className="text-[11px] text-slate-400 mt-0.5">
-                            <span className="text-slate-500 font-medium">Actor: {log.actor}</span> — {log.details || log.reason || 'Event executed.'}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* Comprehensive Payment & Recovery Events Timeline */}
+              <div className="border-t border-slate-800 pt-5">
+                <PaymentEventTimeline
+                  events={events}
+                  isLoading={loadingEvents}
+                  title="Immutable Payment & Recovery Event Stream"
+                  emptyMessage="No payment lifecycle events recorded yet for this order."
+                />
+              </div>
             </div>
           ) : (
             <div className="p-16 text-center bg-slate-900 rounded-2xl border border-slate-800 text-slate-400 shadow-xl">

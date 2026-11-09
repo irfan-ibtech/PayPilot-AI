@@ -17,7 +17,9 @@ class RecoveryOpportunity extends Model
         'recovered_payment_id',
         'recovery_score',
         'priority',
+        'strategy_key',
         'status',
+        'workflow_state',
         'failure_reason_summary',
         'eligibility_signals',
         'ai_summary',
@@ -28,6 +30,7 @@ class RecoveryOpportunity extends Model
         'approved_at',
         'rejected_at',
         'recovered_at',
+        'recovery_time_seconds',
         'audit_trail',
     ];
 
@@ -36,6 +39,7 @@ class RecoveryOpportunity extends Model
         return [
             'recovery_score' => 'integer',
             'ai_confidence' => 'integer',
+            'recovery_time_seconds' => 'integer',
             'eligibility_signals' => 'array',
             'audit_trail' => 'array',
             'approved_at' => 'datetime',
@@ -62,5 +66,10 @@ class RecoveryOpportunity extends Model
     public function recoveredPayment(): BelongsTo
     {
         return $this->belongsTo(Payment::class, 'recovered_payment_id');
+    }
+
+    public function events(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(PaymentEvent::class)->orderBy('occurred_at', 'asc');
     }
 }
