@@ -493,6 +493,10 @@ class RecoveryAgentService
         }
 
         // Record recovery payment attempt
+        $isSimulated = (bool) ($payPalOrder['is_simulated'] ?? false)
+            || str_starts_with($paypalOrderId, 'SIMULATED-')
+            || config('paypal.mode') === 'mock';
+
         $payment = Payment::create([
             'order_id' => $order->id,
             'user_id' => $userId,
@@ -503,6 +507,7 @@ class RecoveryAgentService
             'attempt_number' => $attemptNumber,
             'idempotency_key' => $idempotencyKey,
             'is_recovery_attempt' => true,
+            'is_simulated' => $isSimulated,
             'status' => 'CREATED',
             'payload' => $payPalOrder,
         ]);
@@ -575,16 +580,28 @@ class RecoveryAgentService
             }
         }
 
-        // Calculate recovered revenue
+        // Calculate recovered revenue (Strict segregation: Genuine PayPal settlements vs Simulation)
         $recoveredOpportunities = (clone $baseQuery)
             ->where('status', 'RECOVERED')
-            ->with('order')
+            ->with(['order', 'recoveredPayment'])
             ->get();
 
-        $recoveredRevenue = '0.00';
+        $genuineRecoveredRevenue = '0.00';
+        $simulatedRecoveredRevenue = '0.00';
+        $genuineRecoveredCount = 0;
+        $simulatedRecoveredCount = 0;
+
         foreach ($recoveredOpportunities as $opp) {
+            $isSim = $opp->recoveredPayment?->is_simulated
+                || str_starts_with($opp->recoveredPayment?->paypal_order_id ?? '', 'SIMULATED-');
             if ($opp->order) {
-                $recoveredRevenue = Money::add($recoveredRevenue, $opp->order->total);
+                if ($isSim) {
+                    $simulatedRecoveredRevenue = Money::add($simulatedRecoveredRevenue, $opp->order->total);
+                    $simulatedRecoveredCount++;
+                } else {
+                    $genuineRecoveredRevenue = Money::add($genuineRecoveredRevenue, $opp->order->total);
+                    $genuineRecoveredCount++;
+                }
             }
         }
 
@@ -599,8 +616,12 @@ class RecoveryAgentService
             'rejected_count' => $rejectedCount,
             'potential_recoverable_revenue' => (float) $potentialRevenue,
             'formatted_potential_revenue' => '$' . number_format((float) $potentialRevenue, 2),
-            'recovered_revenue' => (float) $recoveredRevenue,
-            'formatted_recovered_revenue' => '$' . number_format((float) $recoveredRevenue, 2),
+            'recovered_revenue' => (float) $genuineRecoveredRevenue,
+            'formatted_recovered_revenue' => '$' . number_format((float) $genuineRecoveredRevenue, 2),
+            'genuine_recovered_revenue' => (float) $genuineRecoveredRevenue,
+            'simulated_recovered_revenue' => (float) $simulatedRecoveredRevenue,
+            'genuine_recovered_count' => $genuineRecoveredCount,
+            'simulated_recovered_count' => $simulatedRecoveredCount,
             'recovery_rate' => $recoveryRate,
         ];
     }

@@ -79,6 +79,7 @@ class PayPalService
                 'id' => 'SIMULATED-' . strtoupper(bin2hex(random_bytes(6))),
                 'status' => 'CREATED',
                 'intent' => 'CAPTURE',
+                'is_simulated' => true,
                 'purchase_units' => [
                     [
                         'reference_id' => 'order_' . $order->id,
@@ -91,59 +92,44 @@ class PayPalService
             ];
         }
 
-        try {
-            $accessToken = $this->getAccessToken();
-            $requestId = $requestId ?: 'pp_req_' . $order->id . '_' . Str::uuid()->toString();
+        $accessToken = $this->getAccessToken();
+        $requestId = $requestId ?: 'pp_req_' . $order->id . '_' . Str::uuid()->toString();
 
-            $payload = [
-                'intent' => 'CAPTURE',
-                'purchase_units' => [
-                    [
-                        'reference_id' => 'order_' . $order->id,
-                        'description' => 'PayPilot AI Order #' . $order->order_number,
-                        'custom_id' => (string) $order->id,
-                        'amount' => [
-                            'currency_code' => $order->currency,
-                            'value' => $formattedTotal,
-                        ],
-                    ],
-                ],
-                'application_context' => [
-                    'brand_name' => 'PayPilot AI',
-                    'landing_page' => 'NO_PREFERENCE',
-                    'user_action' => 'PAY_NOW',
-                ],
-            ];
-
-            $response = Http::timeout(8)
-                ->withToken($accessToken)
-                ->withHeaders([
-                    'Content-Type' => 'application/json',
-                    'PayPal-Request-Id' => $requestId,
-                ])
-                ->post("{$this->baseUrl}/v2/checkout/orders", $payload);
-
-            if ($response->successful()) {
-                return $response->json();
-            }
-        } catch (\Throwable $e) {
-            // Graceful fallback to sandbox simulated token if credentials fail or are placeholder
-        }
-
-        return [
-            'id' => 'SIMULATED-' . strtoupper(bin2hex(random_bytes(6))),
-            'status' => 'CREATED',
+        $payload = [
             'intent' => 'CAPTURE',
             'purchase_units' => [
                 [
                     'reference_id' => 'order_' . $order->id,
+                    'description' => 'PayPilot AI Order #' . $order->order_number,
+                    'custom_id' => (string) $order->id,
                     'amount' => [
                         'currency_code' => $order->currency,
                         'value' => $formattedTotal,
                     ],
                 ],
             ],
+            'application_context' => [
+                'brand_name' => 'PayPilot AI',
+                'landing_page' => 'NO_PREFERENCE',
+                'user_action' => 'PAY_NOW',
+            ],
         ];
+
+        $response = Http::timeout(10)
+            ->withToken($accessToken)
+            ->withHeaders([
+                'Content-Type' => 'application/json',
+                'PayPal-Request-Id' => $requestId,
+            ])
+            ->post("{$this->baseUrl}/v2/checkout/orders", $payload);
+
+        if ($response->successful()) {
+            return $response->json();
+        }
+
+        $errorData = $response->json();
+        $errorMsg = $errorData['message'] ?? $errorData['error_description'] ?? ($errorData['details'][0]['description'] ?? $response->body());
+        throw new RuntimeException("PayPal order creation failed ({$response->status()}): {$errorMsg}");
     }
 
     /**
@@ -155,6 +141,7 @@ class PayPalService
             return [
                 'id' => $paypalOrderId,
                 'status' => 'COMPLETED',
+                'is_simulated' => true,
                 'purchase_units' => [
                     [
                         'payments' => [
@@ -166,6 +153,7 @@ class PayPalService
                                         'value' => '0.00',
                                         'currency_code' => 'USD',
                                     ],
+                                    'is_simulated' => true,
                                 ],
                             ],
                         ],
@@ -174,45 +162,24 @@ class PayPalService
             ];
         }
 
-        try {
-            $accessToken = $this->getAccessToken();
-            $requestId = $requestId ?: 'pp_cap_' . $paypalOrderId . '_' . Str::uuid()->toString();
+        $accessToken = $this->getAccessToken();
+        $requestId = $requestId ?: 'pp_cap_' . $paypalOrderId . '_' . Str::uuid()->toString();
 
-            $response = Http::timeout(8)
-                ->withToken($accessToken)
-                ->withHeaders([
-                    'Content-Type' => 'application/json',
-                    'PayPal-Request-Id' => $requestId,
-                ])
-                ->post("{$this->baseUrl}/v2/checkout/orders/{$paypalOrderId}/capture", (object) []);
+        $response = Http::timeout(10)
+            ->withToken($accessToken)
+            ->withHeaders([
+                'Content-Type' => 'application/json',
+                'PayPal-Request-Id' => $requestId,
+            ])
+            ->post("{$this->baseUrl}/v2/checkout/orders/{$paypalOrderId}/capture", (object) []);
 
-            if ($response->successful()) {
-                return $response->json();
-            }
-        } catch (\Throwable $e) {
-            // Fallback for simulation
+        if ($response->successful()) {
+            return $response->json();
         }
 
-        return [
-            'id' => $paypalOrderId,
-            'status' => 'COMPLETED',
-            'purchase_units' => [
-                [
-                    'payments' => [
-                        'captures' => [
-                            [
-                                'id' => 'CAPTURE-SIM-' . strtoupper(bin2hex(random_bytes(6))),
-                                'status' => 'COMPLETED',
-                                'amount' => [
-                                    'value' => '0.00',
-                                    'currency_code' => 'USD',
-                                ],
-                            ],
-                        ],
-                    ],
-                ],
-            ],
-        ];
+        $errorData = $response->json();
+        $errorMsg = $errorData['message'] ?? $errorData['error_description'] ?? ($errorData['details'][0]['description'] ?? $response->body());
+        throw new RuntimeException("PayPal capture failed ({$response->status()}): {$errorMsg}");
     }
 
     /**
@@ -224,6 +191,7 @@ class PayPalService
             return [
                 'id' => $paypalOrderId,
                 'status' => 'COMPLETED',
+                'is_simulated' => true,
                 'purchase_units' => [
                     [
                         'payments' => [
@@ -231,6 +199,7 @@ class PayPalService
                                 [
                                     'id' => 'CAPTURE-SIM-' . strtoupper(bin2hex(random_bytes(6))),
                                     'status' => 'COMPLETED',
+                                    'is_simulated' => true,
                                 ],
                             ],
                         ],
@@ -239,23 +208,18 @@ class PayPalService
             ];
         }
 
-        try {
-            $accessToken = $this->getAccessToken();
-            $response = Http::timeout(8)
-                ->withToken($accessToken)
-                ->withHeaders(['Content-Type' => 'application/json'])
-                ->get("{$this->baseUrl}/v2/checkout/orders/{$paypalOrderId}");
+        $accessToken = $this->getAccessToken();
+        $response = Http::timeout(10)
+            ->withToken($accessToken)
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->get("{$this->baseUrl}/v2/checkout/orders/{$paypalOrderId}");
 
-            if ($response->successful()) {
-                return $response->json();
-            }
-        } catch (\Throwable $e) {
-            // fallback
+        if ($response->successful()) {
+            return $response->json();
         }
 
-        return [
-            'id' => $paypalOrderId,
-            'status' => 'UNKNOWN',
-        ];
+        $errorData = $response->json();
+        $errorMsg = $errorData['message'] ?? $errorData['error_description'] ?? $response->body();
+        throw new RuntimeException("PayPal order inquiry failed ({$response->status()}): {$errorMsg}");
     }
 }

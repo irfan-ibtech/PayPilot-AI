@@ -939,6 +939,7 @@ export const RevenueRecovery: React.FC = () => {
           isOpen={isCheckoutModalOpen}
           onClose={() => setIsCheckoutModalOpen(false)}
           onPaymentSuccess={handlePaymentSuccess}
+          recoveryOpportunityId={selectedOpportunity.id}
         />
       )}
     </div>

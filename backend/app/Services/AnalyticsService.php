@@ -33,6 +33,18 @@ class AnalyticsService
         $paymentsQuery = Payment::where('user_id', $userId);
         $rawCapturedSum = (clone $paymentsQuery)->where('status', 'COMPLETED')->sum('amount');
         $totalPayPalCapturedVolume = Money::format($rawCapturedSum);
+        $genuineCapturedSum = (clone $paymentsQuery)
+            ->where('status', 'COMPLETED')
+            ->where('is_simulated', false)
+            ->whereNot('paypal_order_id', 'LIKE', 'SIMULATED-%')
+            ->sum('amount');
+        $simulatedCapturedSum = (clone $paymentsQuery)
+            ->where('status', 'COMPLETED')
+            ->where(function ($q) {
+                $q->where('is_simulated', true)
+                  ->orWhere('paypal_order_id', 'LIKE', 'SIMULATED-%');
+            })
+            ->sum('amount');
         $totalPayPalTransactions = (clone $paymentsQuery)->count();
 
         // 4. Top-Selling Products by Revenue
@@ -104,6 +116,10 @@ class AnalyticsService
             'paypal_metrics' => [
                 'total_captured_volume' => (float) $totalPayPalCapturedVolume,
                 'formatted_captured_volume' => '$' . number_format((float) $totalPayPalCapturedVolume, 2),
+                'genuine_captured_volume' => (float) Money::format($genuineCapturedSum),
+                'formatted_genuine_volume' => '$' . number_format((float) Money::format($genuineCapturedSum), 2),
+                'simulated_captured_volume' => (float) Money::format($simulatedCapturedSum),
+                'formatted_simulated_volume' => '$' . number_format((float) Money::format($simulatedCapturedSum), 2),
                 'total_transactions' => $totalPayPalTransactions,
             ],
             'top_selling_products' => $topProducts,

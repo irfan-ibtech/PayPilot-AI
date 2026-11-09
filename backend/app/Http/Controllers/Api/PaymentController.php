@@ -85,6 +85,10 @@ class PaymentController extends Controller
         }
 
         // Create new Payment attempt record (preserving attempt history)
+        $isSimulated = (bool) ($payPalOrder['is_simulated'] ?? false)
+            || str_starts_with($paypalOrderId, 'SIMULATED-')
+            || config('paypal.mode') === 'mock';
+
         $payment = Payment::create([
             'order_id' => $order->id,
             'user_id' => $request->user()->id,
@@ -95,6 +99,7 @@ class PaymentController extends Controller
             'attempt_number' => $attemptNumber,
             'idempotency_key' => $idempotencyKey,
             'is_recovery_attempt' => (bool) ($validated['is_recovery_attempt'] ?? false),
+            'is_simulated' => $isSimulated,
             'status' => 'CREATED',
             'payload' => $payPalOrder,
         ]);
@@ -265,9 +270,13 @@ class PaymentController extends Controller
             // Extract capture unit details
             $capture = $captureResponse['purchase_units'][0]['payments']['captures'][0] ?? null;
             $captureId = $capture['id'] ?? ($captureResponse['id'] ?? null);
+            $isSimulated = (bool) ($captureResponse['is_simulated'] ?? false)
+                || str_starts_with($paypalOrderId, 'SIMULATED-')
+                || str_starts_with($captureId ?? '', 'CAPTURE-SIM-')
+                || config('paypal.mode') === 'mock';
 
             // Security check: Validate captured amount and currency using Money (BCMath)
-            if (! str_starts_with($paypalOrderId, 'SIMULATED-') && $capture) {
+            if (! $isSimulated && $capture) {
                 $capturedAmount = Money::format($capture['amount']['value'] ?? '0.00', $lockedOrder->currency);
                 $capturedCurrency = strtoupper($capture['amount']['currency_code'] ?? '');
 
@@ -308,6 +317,7 @@ class PaymentController extends Controller
             $lockedPayment->update([
                 'status' => 'COMPLETED',
                 'paypal_capture_id' => $captureId,
+                'is_simulated' => $isSimulated,
                 'captured_at' => now(),
                 'payload' => $captureResponse,
             ]);
@@ -327,9 +337,11 @@ class PaymentController extends Controller
                 $audit = $opportunity->audit_trail ?? [];
                 $audit[] = [
                     'action' => 'RECOVERED',
-                    'actor' => 'PAYPAL_REST_V2',
+                    'actor' => $isSimulated ? 'LOCAL_SIMULATION' : 'PAYPAL_REST_V2',
                     'timestamp' => now()->toIso8601String(),
-                    'details' => "Payment verified and captured via PayPal. Capture ID: {$captureId}.",
+                    'details' => $isSimulated
+                        ? "Payment captured via simulation. Token: {$captureId}."
+                        : "Payment verified and captured via PayPal. Capture ID: {$captureId}.",
                 ];
 
                 $opportunity->update([
@@ -345,9 +357,11 @@ class PaymentController extends Controller
                     $request->user()->id,
                     $lockedOrder->id,
                     'RECOVERY_SETTLED',
-                    'AI_AGENT',
-                    "Revenue successfully recovered via PayPal Capture #{$captureId}",
-                    ['capture_id' => $captureId, 'recovery_time_seconds' => $recoveryTime],
+                    $isSimulated ? 'LOCAL_SIMULATION' : 'AI_AGENT',
+                    $isSimulated
+                        ? "Simulated revenue recovery recorded for test order"
+                        : "Revenue successfully recovered via genuine PayPal Capture #{$captureId}",
+                    ['capture_id' => $captureId, 'is_simulated' => $isSimulated, 'recovery_time_seconds' => $recoveryTime],
                     $lockedPayment->id,
                     $opportunity->id
                 );
@@ -357,9 +371,11 @@ class PaymentController extends Controller
                 $request->user()->id,
                 $lockedOrder->id,
                 'CAPTURE_SUCCEEDED',
-                'PAYPAL_API',
-                "PayPal payment attempt #{$lockedPayment->attempt_number} completed and captured (Capture ID: {$captureId})",
-                ['capture_id' => $captureId, 'amount' => $lockedPayment->amount, 'currency' => $lockedPayment->currency],
+                $isSimulated ? 'LOCAL_SIMULATION' : 'PAYPAL_API',
+                $isSimulated
+                    ? "Payment simulation captured for demo testing (Token: {$captureId})"
+                    : "PayPal payment attempt #{$lockedPayment->attempt_number} completed and captured (Capture ID: {$captureId})",
+                ['capture_id' => $captureId, 'is_simulated' => $isSimulated, 'amount' => $lockedPayment->amount, 'currency' => $lockedPayment->currency],
                 $lockedPayment->id
             );
 
@@ -414,9 +430,14 @@ class PaymentController extends Controller
                     }
                 }
 
+                $isSimulated = (bool) ($payPalDetails['is_simulated'] ?? false)
+                    || str_starts_with($paypalOrderId, 'SIMULATED-')
+                    || str_starts_with($captureId ?? '', 'CAPTURE-SIM-');
+
                 $payment->update([
                     'status' => 'COMPLETED',
                     'paypal_capture_id' => $captureId,
+                    'is_simulated' => $isSimulated,
                     'captured_at' => now(),
                     'payload' => $payPalDetails,
                 ]);

@@ -22,6 +22,7 @@ export interface PaymentRecord {
   failure_reason?: string | null;
   is_recovery_attempt?: boolean;
   is_demo_seed?: boolean;
+  is_simulated?: boolean;
   captured_at?: string | null;
   created_at: string;
 }

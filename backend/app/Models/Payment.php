@@ -24,6 +24,7 @@ class Payment extends Model
         'failure_reason',
         'is_recovery_attempt',
         'is_demo_seed',
+        'is_simulated',
         'payload',
         'captured_at',
     ];
@@ -35,6 +36,7 @@ class Payment extends Model
             'attempt_number' => 'integer',
             'is_recovery_attempt' => 'boolean',
             'is_demo_seed' => 'boolean',
+            'is_simulated' => 'boolean',
             'payload' => 'array',
             'captured_at' => 'datetime',
         ];

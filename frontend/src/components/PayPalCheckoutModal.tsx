@@ -9,6 +9,7 @@ interface PayPalCheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
   onPaymentSuccess: (payment: PaymentRecord) => void;
+  recoveryOpportunityId?: number;
 }
 
 export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
@@ -16,8 +17,10 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
   isOpen,
   onClose,
   onPaymentSuccess,
+  recoveryOpportunityId,
 }) => {
   const [clientId, setClientId] = useState<string>('');
+  const [paypalMode, setPaypalMode] = useState<string>('sandbox');
   const [loadingConfig, setLoadingConfig] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [warningMessage, setWarningMessage] = useState<string | null>(null);
@@ -37,6 +40,7 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
       try {
         const response = await api.get('/payments/paypal/client-id');
         setClientId(response.data.client_id || '');
+        setPaypalMode(response.data.mode || 'sandbox');
       } catch (err) {
         console.error('Failed to fetch PayPal client ID', err);
         setErrorMessage('Unable to load payment configuration.');
@@ -54,9 +58,14 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
     setIsCapturing(true);
     setErrorMessage(null);
     try {
-      // 1. Create order
-      const createRes = await api.post(`/payments/paypal/${order.id}/create`);
-      const paypalOrderId = createRes.data.paypal_order_id;
+      let paypalOrderId: string;
+      if (recoveryOpportunityId) {
+        const createRes = await api.post(`/recovery/opportunities/${recoveryOpportunityId}/checkout`);
+        paypalOrderId = createRes.data.data.paypal_order_id;
+      } else {
+        const createRes = await api.post(`/payments/paypal/${order.id}/create`);
+        paypalOrderId = createRes.data.paypal_order_id;
+      }
 
       // 2. Capture payment
       const captureRes = await api.post('/payments/paypal/capture', {
@@ -77,6 +86,8 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
       setIsCapturing(false);
     }
   };
+
+  const isSimulatedPayment = completedPayment?.is_simulated || completedPayment?.paypal_order_id?.startsWith('SIMULATED-');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
@@ -101,9 +112,16 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
               <span className="text-xs font-mono font-semibold text-blue-400">
                 {order.order_number}
               </span>
-              <span className="text-xs px-2 py-0.2 rounded-full bg-blue-950 text-blue-300 border border-blue-800">
-                Sandbox
-              </span>
+              {clientId ? (
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1.5 font-medium">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  Live PayPal {paypalMode === 'sandbox' ? 'Sandbox' : 'Production'}
+                </span>
+              ) : (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-800 font-medium">
+                  Local Simulation
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -140,6 +158,19 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
             </div>
 
             <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 text-left text-xs font-mono space-y-1.5 text-slate-300">
+              <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+                <span className="text-slate-400 font-sans font-semibold">Settlement Verification:</span>
+                {isSimulatedPayment ? (
+                  <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 text-[10px] font-sans font-semibold">
+                    LOCAL TEST SIMULATION
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 text-[10px] font-sans font-semibold flex items-center gap-1">
+                    <span className="h-1 w-1 rounded-full bg-emerald-400 animate-pulse"></span>
+                    GENUINE PAYPAL CAPTURE
+                  </span>
+                )}
+              </div>
               <p>
                 <span className="text-slate-500">PayPal Order ID:</span>{' '}
                 <span className="text-blue-400">{completedPayment.paypal_order_id}</span>
@@ -148,6 +179,12 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
                 <span className="text-slate-500">Capture ID:</span>{' '}
                 <span className="text-emerald-400">
                   {completedPayment.paypal_capture_id || 'COMPLETED'}
+                </span>
+              </p>
+              <p>
+                <span className="text-slate-500">Settled Amount:</span>{' '}
+                <span className="text-white font-bold">
+                  ${parseFloat(String(completedPayment.amount || order.total)).toFixed(2)} {completedPayment.currency || order.currency}
                 </span>
               </p>
               <p>
@@ -198,7 +235,7 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
                 <span className="text-xs">Initializing PayPal SDK...</span>
               </div>
             ) : clientId ? (
-              <div className="min-h-[140px] pt-1">
+              <div className="min-h-[140px] pt-1 space-y-3">
                 <PayPalScriptProvider
                   options={{
                     clientId: clientId,
@@ -217,6 +254,10 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
                     createOrder={async () => {
                       setErrorMessage(null);
                       try {
+                        if (recoveryOpportunityId) {
+                          const response = await api.post(`/recovery/opportunities/${recoveryOpportunityId}/checkout`);
+                          return response.data.data.paypal_order_id;
+                        }
                         const response = await api.post(`/payments/paypal/${order.id}/create`);
                         return response.data.paypal_order_id;
                       } catch (err: unknown) {
@@ -255,6 +296,18 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
                     }}
                   />
                 </PayPalScriptProvider>
+
+                {/* Optional test simulation button for development/offline environments */}
+                <div className="pt-2 border-t border-slate-800/80 text-center">
+                  <button
+                    type="button"
+                    disabled={isCapturing}
+                    onClick={handleSimulatedCapture}
+                    className="text-[11px] text-slate-400 hover:text-slate-200 underline hover:no-underline transition disabled:opacity-50"
+                  >
+                    Run local simulation fallback test
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="space-y-3 pt-2">
