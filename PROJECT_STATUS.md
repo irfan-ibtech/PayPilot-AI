@@ -30,14 +30,6 @@
   - `OrderItem`: BelongsTo `Order`, BelongsTo `Product`.
   - `Payment`: BelongsTo `Order`, BelongsTo `User`.
   - `BusinessRecommendation`: BelongsTo `User`.
-- **API Endpoints & Controllers:**
-  - `POST /api/register` -> `AuthController@register`
-  - `POST /api/login` -> `AuthController@login`
-  - `POST /api/logout` -> `AuthController@logout` (Auth Sanctum)
-  - `GET /api/me` -> `AuthController@me` (Auth Sanctum)
-  - `apiResource('products')` -> `ProductController`
-  - `apiResource('orders')` -> `OrderController`
-  - `apiResource('payments')` -> `PaymentController`
 - **Seeded Data:**
   - Default Merchant: `demo@paypilot.ai` / `password123`
   - 5 seeded catalog items (Wireless Headphones, Phone Case, Mechanical Keyboard, USB-C Charging Hub, Ergonomic Mousepad).
@@ -47,21 +39,53 @@
 - **Dependencies:** `lucide-react`, `recharts`, `axios`, `clsx`, `tailwindcss`, `@tailwindcss/vite`.
 - **Styling:** Tailwind CSS v4 configured with `@tailwindcss/vite`.
 - **API Client:** Axios instance in `src/services/api.ts` with Sanctum token attachment and 401 handling.
-- **Context & Pages:**
-  - `AuthContext`: Full merchant authentication state lifecycle.
-  - `Login` & `Register`: Clean merchant auth views with 1-click Demo credential filler.
-  - `Navbar` & `Sidebar`: Responsive dashboard navigation with sandbox status.
-  - `Dashboard`: Metric StatCards, revenue trajectory chart (`recharts`), catalog table.
-  - `OrderAssistant`: Dynamic product selection, cart totals, and checkout preparation.
-  - `Copilot`: AI Copilot conversational UI and autonomous recommendation cards.
-- **Build Status:** Verified production build succeeds cleanly.
+- **Context & Pages:** `AuthContext`, `Login`, `Register`, `Navbar`, `Sidebar`, `Dashboard`, `OrderAssistant`, `Copilot`.
 
 ---
 
-## Next Steps: Milestone 2 — PayPal Core Engine 🚀
-- PayPal Developer SDK / Direct v2 REST API integration.
-- Sandbox merchant onboarding & credentials validation.
-- Order creation endpoint (`POST /v2/checkout/orders`).
-- Order capture endpoint (`POST /v2/checkout/orders/{id}/capture`).
-- Instant webhooks handling & local payment status synchronization.
-- Frontend PayPal Buttons SDK integration.
+## Milestone 2: Core PayPal REST Integration & Verification Engine — COMPLETE ✅
+
+### 1. PayPal Service Implementation (`backend/app/Services/PayPalService.php`)
+- **OAuth2 Token Handling:** `POST /v1/oauth2/token` with HTTP Basic Authentication (`PAYPAL_CLIENT_ID` & `PAYPAL_CLIENT_SECRET`), cached for token expiry duration minus 60 seconds.
+- **Order Creation:** `POST /v2/checkout/orders` with `intent: CAPTURE`, `purchase_units` (reference ID, description, custom merchant ID, amount value and currency), and `application_context`.
+- **Payment Capture:** `POST /v2/checkout/orders/{id}/capture` with bearer authorization.
+- **Configuration:** Dedicated `backend/config/paypal.php` mapping mode, client ID, secret, and dynamic sandbox/live base URL (`https://api-m.sandbox.paypal.com`).
+
+### 2. Controllers & Server-Side Security Verification
+- **`OrderController`:**
+  - Strict server-side subtotal and total calculation on `POST /api/orders` to eliminate client-side price tampering.
+  - Automatic unique order number generator (`PP-XXXXXXXX`).
+  - Atomic database transactions creating orders and associated line items.
+- **`PaymentController`:**
+  - `POST /api/payments/paypal/{orderId}/create`: Validates merchant order ownership and `PENDING` state, initializes PayPal order, and creates tracked `Payment` record in state `CREATED`.
+  - `POST /api/payments/paypal/capture`:
+    - **Idempotency Guard:** Detects previously completed transactions to prevent duplicate captures.
+    - **Status Validation:** Verifies capture status is strictly `COMPLETED`.
+    - **Anti-Tampering Guard:** Validates captured monetary amount and currency code against the local database order (`abs($capturedAmount - $expectedAmount) <= 0.01`). Flags mismatches and updates state to `FAILED`.
+    - **Atomic State Transitions:** In a DB transaction, updates `Payment` (`status: COMPLETED`, `paypal_capture_id`, `captured_at`, `payload`) and transitions `Order` to `status: PAID`.
+  - `GET /api/payments/paypal/client-id`: Exposes client ID to frontend for SDK initialization without exposing secrets.
+
+### 3. Frontend PayPal Checkout Integration
+- **SDK:** Official `@paypal/react-paypal-js` installed and integrated.
+- **`PayPalCheckoutModal`:**
+  - Wraps checkout inside `<PayPalScriptProvider>` fetching credentials dynamically from the backend.
+  - Renders `<PayPalButtons>` with server-driven `createOrder` and `onApprove` capture triggering.
+  - Handles `onError` and `onCancel` with merchant user feedback.
+  - Displays verified capture ID and anti-tamper confirmation.
+  - Provides a simulated capture option for rapid local sandbox testing without credentials.
+- **Live Dashboard Updates (`frontend/src/pages/Dashboard.tsx`):**
+  - Connected StatCards directly to `GET /api/orders` calculations (Verified Revenue, Total Orders, Paid Orders, Pending Orders).
+  - Displays real database orders table with status badges (`PAID`, `PENDING`).
+  - Row-level "Pay with PayPal" trigger for any pending orders.
+- **Order Assistant (`frontend/src/pages/OrderAssistant.tsx`):**
+  - Instant order builder from catalog + custom item inputs.
+  - One-click order creation and immediate PayPal checkout launching.
+
+---
+
+## Next Steps: Milestone 3 — AI Order Assistant & Intelligence Copilot using Gemini 🚀
+- Gemini API SDK integration in `backend`.
+- Natural language merchant commands (e.g. "Create an invoice for 2 keyboards and 1 headset").
+- Autonomous order generation & intent extraction via Gemini 2.5 Flash function calling.
+- Proactive merchant analytics: inventory velocity, pricing optimizations, bundle deal recommendations stored in `business_recommendations`.
+- Frontend conversational Copilot connected directly to Gemini streaming responses.

@@ -4,7 +4,6 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ProductController;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -23,8 +22,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::get('/user', [AuthController::class, 'me']);
 
-    // Domain Resource Routes (Placeholder / Milestone endpoints)
+    // Products Catalog
     Route::apiResource('products', ProductController::class);
-    Route::apiResource('orders', OrderController::class);
-    Route::apiResource('payments', PaymentController::class);
+
+    // Order Management
+    Route::get('/orders', [OrderController::class, 'index']);
+    Route::post('/orders', [OrderController::class, 'store']);
+    Route::get('/orders/{id}', [OrderController::class, 'show']);
+
+    // PayPal Verification & Capture Engine
+    Route::get('/payments/paypal/client-id', [PaymentController::class, 'getPayPalClientId']);
+    Route::post('/payments/paypal/{orderId}/create', [PaymentController::class, 'createPayPalOrder']);
+    Route::post('/payments/paypal/capture', [PaymentController::class, 'capturePayPalOrder']);
+    Route::get('/payments', [PaymentController::class, 'index']);
+    Route::get('/payments/{payment}', [PaymentController::class, 'show']);
 });

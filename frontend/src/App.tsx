@@ -39,7 +39,9 @@ const MainLayout: React.FC = () => {
         <Sidebar currentTab={currentTab} onSelectTab={setCurrentTab} />
         <main className="flex-1 p-8 overflow-y-auto max-w-7xl">
           {currentTab === 'dashboard' && <Dashboard />}
-          {currentTab === 'assistant' && <OrderAssistant />}
+          {currentTab === 'assistant' && (
+            <OrderAssistant onNavigateDashboard={() => setCurrentTab('dashboard')} />
+          )}
           {currentTab === 'copilot' && <Copilot />}
           {currentTab === 'products' && <Dashboard />}
           {currentTab === 'payments' && <Dashboard />}
