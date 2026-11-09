@@ -7,6 +7,8 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Models\Product;
 use App\Models\User;
+use App\Services\RecoveryAgentService;
+use App\Support\Money;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -31,31 +33,31 @@ class DatabaseSeeder extends Seeder
             [
                 'name' => 'Wireless Headphones',
                 'description' => 'Premium active noise-cancelling over-ear wireless headphones.',
-                'unit_price' => 45.00,
+                'unit_price' => '45.00',
                 'currency' => 'USD',
             ],
             [
                 'name' => 'Phone Case',
                 'description' => 'Slim shockproof silicone case designed for everyday impact resistance.',
-                'unit_price' => 12.00,
+                'unit_price' => '12.00',
                 'currency' => 'USD',
             ],
             [
                 'name' => 'Mechanical Keyboard',
                 'description' => 'Compact 75% hot-swappable mechanical keyboard with RGB backlighting.',
-                'unit_price' => 85.00,
+                'unit_price' => '85.00',
                 'currency' => 'USD',
             ],
             [
                 'name' => 'USB-C Charging Hub',
                 'description' => '7-in-1 multi-port adapter with 100W Power Delivery pass-through and 4K HDMI.',
-                'unit_price' => 29.50,
+                'unit_price' => '29.50',
                 'currency' => 'USD',
             ],
             [
                 'name' => 'Ergonomic Mousepad',
                 'description' => 'Memory foam wrist-rest desk pad with textured non-slip rubber base.',
-                'unit_price' => 18.00,
+                'unit_price' => '18.00',
                 'currency' => 'USD',
             ],
         ];
@@ -98,6 +100,7 @@ class DatabaseSeeder extends Seeder
             [
                 'days_ago' => 5,
                 'status' => 'FAILED',
+                'failure_reason' => 'Customer card issuer declined authorization (temporary limit reached)',
                 'items' => [
                     ['name' => 'Wireless Headphones', 'qty' => 2],
                 ],
@@ -123,6 +126,7 @@ class DatabaseSeeder extends Seeder
             [
                 'days_ago' => 3,
                 'status' => 'PENDING',
+                'failure_reason' => 'PayPal checkout session timed out during 2FA verification',
                 'items' => [
                     ['name' => 'Mechanical Keyboard', 'qty' => 2],
                 ],
@@ -148,6 +152,7 @@ class DatabaseSeeder extends Seeder
             [
                 'days_ago' => 1,
                 'status' => 'PENDING',
+                'failure_reason' => 'Checkout window closed before PayPal approval',
                 'items' => [
                     ['name' => 'Wireless Headphones', 'qty' => 1],
                 ],
@@ -164,6 +169,7 @@ class DatabaseSeeder extends Seeder
             [
                 'days_ago' => 0,
                 'status' => 'PENDING',
+                'failure_reason' => 'Customer initiated PayPal checkout but session abandoned on shipping confirmation',
                 'items' => [
                     ['name' => 'USB-C Charging Hub', 'qty' => 1],
                     ['name' => 'Phone Case', 'qty' => 1],
@@ -175,15 +181,15 @@ class DatabaseSeeder extends Seeder
             $createdAt = Carbon::now()->subDays($template['days_ago'])->subHours(rand(1, 10))->subMinutes(rand(5, 50));
             $orderNumber = 'PP-' . strtoupper(Str::random(8));
 
-            $subtotal = 0.00;
+            $subtotal = '0.00';
             $itemsData = [];
 
             foreach ($template['items'] as $itemRef) {
                 $p = $productModels[$itemRef['name']];
                 $qty = $itemRef['qty'];
-                $price = (float) $p->unit_price;
-                $lineTotal = round($qty * $price, 2);
-                $subtotal += $lineTotal;
+                $price = Money::format($p->unit_price);
+                $lineTotal = Money::mul($qty, $price);
+                $subtotal = Money::add($subtotal, $lineTotal);
 
                 $itemsData[] = [
                     'product_id' => $p->id,
@@ -202,6 +208,7 @@ class DatabaseSeeder extends Seeder
                 'currency' => 'USD',
                 'status' => $template['status'],
                 'notes' => "Seeded order #{$orderNumber}",
+                'is_demo_seed' => true,
                 'created_at' => $createdAt,
                 'updated_at' => $createdAt,
             ]);
@@ -213,7 +220,7 @@ class DatabaseSeeder extends Seeder
                 ]));
             }
 
-            // Create Payment record for PAID and FAILED orders
+            // Create Payment record for PAID, FAILED, and PENDING orders with drop-offs
             if ($template['status'] === 'PAID') {
                 Payment::create([
                     'order_id' => $order->id,
@@ -223,7 +230,11 @@ class DatabaseSeeder extends Seeder
                     'paypal_capture_id' => 'CAPTURE-SIM-' . strtoupper(Str::random(12)),
                     'amount' => $order->total,
                     'currency' => 'USD',
+                    'attempt_number' => 1,
+                    'idempotency_key' => 'pp_seed_' . $order->id . '_1',
                     'status' => 'COMPLETED',
+                    'is_recovery_attempt' => false,
+                    'is_demo_seed' => true,
                     'payload' => [
                         'status' => 'COMPLETED',
                         'simulated' => true,
@@ -233,7 +244,7 @@ class DatabaseSeeder extends Seeder
                     'created_at' => $createdAt,
                     'updated_at' => $createdAt,
                 ]);
-            } elseif ($template['status'] === 'FAILED') {
+            } elseif ($template['status'] === 'FAILED' || isset($template['failure_reason'])) {
                 Payment::create([
                     'order_id' => $order->id,
                     'user_id' => $merchant->id,
@@ -242,10 +253,15 @@ class DatabaseSeeder extends Seeder
                     'paypal_capture_id' => null,
                     'amount' => $order->total,
                     'currency' => 'USD',
+                    'attempt_number' => 1,
+                    'idempotency_key' => 'pp_seed_' . $order->id . '_1',
                     'status' => 'FAILED',
+                    'failure_reason' => $template['failure_reason'] ?? 'Payment session interrupted',
+                    'is_recovery_attempt' => false,
+                    'is_demo_seed' => true,
                     'payload' => [
                         'status' => 'FAILED',
-                        'error' => 'INSTRUMENT_DECLINED',
+                        'error' => $template['failure_reason'] ?? 'INSTRUMENT_DECLINED',
                     ],
                     'captured_at' => null,
                     'created_at' => $createdAt,
@@ -258,10 +274,17 @@ class DatabaseSeeder extends Seeder
         BusinessRecommendation::create([
             'user_id' => $merchant->id,
             'title' => 'Recover Unpaid Orders via PayPal Express Invoicing',
-            'description' => 'You currently have 3 pending orders awaiting checkout completion. Sending automated PayPal 1-click payment links will substantially recover abandoned revenue.',
-            'supporting_metric' => '3 Pending Orders (~$215 recoverable)',
+            'description' => 'You currently have 4 pending or failed orders awaiting checkout completion. Sending automated PayPal 1-click payment links will substantially recover abandoned revenue.',
+            'supporting_metric' => '4 Recoverable Carts (~$345 potential)',
             'suggested_action' => 'Deploy 1-click PayPal paylinks to pending carts',
             'priority' => 'high',
         ]);
+
+        // Run initial AI Recovery Scan for demo merchant
+        try {
+            app(RecoveryAgentService::class)->scanOpportunities($merchant->id);
+        } catch (\Throwable $e) {
+            // Seeder fallback if offline
+        }
     }
 }

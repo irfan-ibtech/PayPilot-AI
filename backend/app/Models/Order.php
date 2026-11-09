@@ -56,4 +56,14 @@ class Order extends Model
     {
         return $this->hasOne(Payment::class)->latestOfMany();
     }
+
+    public function recoveryOpportunities(): HasMany
+    {
+        return $this->hasMany(RecoveryOpportunity::class);
+    }
+
+    public function recoveryOpportunity(): HasOne
+    {
+        return $this->hasOne(RecoveryOpportunity::class)->latestOfMany();
+    }
 }

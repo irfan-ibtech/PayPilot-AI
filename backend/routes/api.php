@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\Api\RecoveryController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -47,4 +48,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/payments/paypal/capture', [PaymentController::class, 'capturePayPalOrder']);
     Route::get('/payments', [PaymentController::class, 'index']);
     Route::get('/payments/{payment}', [PaymentController::class, 'show']);
+
+    // AI Revenue Recovery Agent & Pipeline
+    Route::get('/recovery/metrics', [RecoveryController::class, 'metrics']);
+    Route::get('/recovery/opportunities', [RecoveryController::class, 'index']);
+    Route::post('/recovery/scan', [RecoveryController::class, 'scan']);
+    Route::get('/recovery/opportunities/{id}', [RecoveryController::class, 'show']);
+    Route::post('/recovery/opportunities/{id}/approve', [RecoveryController::class, 'approve']);
+    Route::post('/recovery/opportunities/{id}/reject', [RecoveryController::class, 'reject']);
+    Route::post('/recovery/opportunities/{id}/checkout', [RecoveryController::class, 'launchCheckout']);
 });
