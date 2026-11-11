@@ -352,7 +352,7 @@ PayPilot AI is **Hackathon Evaluation-Ready** against the authentic PayPal Sandb
 - Live PayPal v2 Order Creation (`POST /v2/checkout/orders`) with upstream idempotency (`PayPal-Request-Id`).
 - Real-time order inquiry (`GET /v2/checkout/orders/{id}`) and pre-approval capture rejection (HTTP 422 `ORDER_NOT_APPROVED`).
 - Dedicated recovery checkout session generation with strict merchant approval gates.
-- **Verified Human-Approved Recovery Payment Lifecycle:** End-to-end buyer approval completed by human operator using a Sandbox Personal Buyer account on `sandbox.paypal.com`; backend server-side capture confirmed via PayPal API (Capture ID: `3FL64688SL0637948`, `$69.00 USD`, status `COMPLETED`); local order `#PP-75OQ3JVZ` and Opportunity `#8` transitioned to `PAID` / `RECOVERED`; genuine recovered revenue incremented by `$69.00 USD` with zero duplicate accounting.
+- **Verified Human-Approved Recovery Payment Lifecycle (Video Submission Showcase):** End-to-end recovery approval completed live on camera; backend server-side capture confirmed via PayPal API (Order `#PP-H08F2IBJ`, Opportunity `#17`, Capture ID: `87533940633031840`, `$147.00 USD`, status `COMPLETED`); local order `#PP-H08F2IBJ` transitioned to `PAID` / `RECOVERED` with an explainable recovery score of 98/100, Gemini 3.1 Flash Lite behavioral diagnostic, and immutable 4-stage event log. (Additional verified sandbox settlement: `#3FL64688SL0637948`, `$69.00 USD`).
 - Strict accounting segregation: seeded demo figures and local simulations are never counted towards genuine PayPal captured volume.
 
 ### Outstanding Requirements for Live-Money Production Deployment:

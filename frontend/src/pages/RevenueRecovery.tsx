@@ -125,6 +125,11 @@ export const RevenueRecovery: React.FC = () => {
 
       if (loadedOpps.length > 0) {
         setSelectedOpportunity((prev) => {
+          const oppParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('opp') : null;
+          if (oppParam) {
+            const match = loadedOpps.find((o) => o.id.toString() === oppParam || o.order?.order_number?.includes(oppParam));
+            if (match) return match;
+          }
           if (!prev) return loadedOpps[0];
           const found = loadedOpps.find((o) => o.id === prev.id);
           return found || loadedOpps[0];

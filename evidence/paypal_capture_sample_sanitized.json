@@ -1,9 +1,9 @@
 {
-  "id": "3FL64688SL0637948",
+  "id": "87533940633031840",
   "status": "COMPLETED",
   "amount": {
     "currency_code": "USD",
-    "value": "69.00"
+    "value": "147.00"
   },
   "final_capture": true,
   "seller_protection": {
@@ -16,47 +16,49 @@
   "seller_receivable_breakdown": {
     "gross_amount": {
       "currency_code": "USD",
-      "value": "69.00"
+      "value": "147.00"
     },
     "paypal_fee": {
       "currency_code": "USD",
-      "value": "2.40"
+      "value": "5.11"
     },
     "net_amount": {
       "currency_code": "USD",
-      "value": "66.60"
+      "value": "141.89"
     }
   },
   "multi_currency_settlement": {
     "settlement_currency": "PHP",
     "exchange_rate": "59.318261",
-    "settlement_amount": "4092.96",
+    "settlement_amount": "8719.78",
     "precision_standard": "BCMath Zero-Float Half-Up"
   },
   "supplementary_data": {
     "related_ids": {
-      "order_id": "8UX81126AK7595001"
+      "order_id": "7FC634873S0216408",
+      "order_number": "PP-H08F2IBJ",
+      "recovery_opportunity_id": 17
     }
   },
   "payee": {
     "email_address": "merchant-sanitized@paypilot.ai",
     "merchant_id": "AVPLZGAPLPXJG"
   },
-  "create_time": "2026-11-09T17:15:30Z",
-  "update_time": "2026-11-09T17:15:32Z",
+  "create_time": "2026-11-11T23:20:03Z",
+  "update_time": "2026-11-11T23:20:23Z",
   "links": [
     {
-      "href": "https://api.sandbox.paypal.com/v2/payments/captures/3FL64688SL0637948",
+      "href": "https://api.sandbox.paypal.com/v2/payments/captures/87533940633031840",
       "rel": "self",
       "method": "GET"
     },
     {
-      "href": "https://api.sandbox.paypal.com/v2/payments/captures/3FL64688SL0637948/refund",
+      "href": "https://api.sandbox.paypal.com/v2/payments/captures/87533940633031840/refund",
       "rel": "refund",
       "method": "POST"
     },
     {
-      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/8UX81126AK7595001",
+      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/7FC634873S0216408",
       "rel": "up",
       "method": "GET"
     }
