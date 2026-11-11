@@ -1,0 +1,43 @@
+PHPUnit 12.5.43 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.4.12
+Configuration: /Users/muhammadirfanbashir/Documents/hackathon/paypal_ai_hackathon/PayPilot AI/backend/phpunit.xml
+
+Time: 00:09.306, Memory: 60.50 MB
+
+[4mExample (Tests\Feature\Example)[0m
+[32m ✔ [0mThe application returns a successful response
+
+[4mExample (Tests\Unit\Example)[0m
+[32m ✔ [0mThat true is true
+
+[4mPayment Security (Tests\Feature\PaymentSecurity)[0m
+[32m ✔ [0mRejects tampered or mismatched payment amount on capture
+[32m ✔ [0mIdempotent capture returns cached success without duplicate processing
+[32m ✔ [0mMulti attempt ledger increments attempt number and records idempotency key
+[32m ✔ [0mTenant isolation prevents capturing another merchant order
+[32m ✔ [0mAi order catalog price resolution overrides untrusted prompt prices
+[32m ✔ [0mBuyer checkout cancellation marks abandoned and payment failed
+
+[4mPay Pal Sandbox Integration (Tests\Feature\PayPalSandboxIntegration)[0m
+[32m ✔ [0mMissing credentials throws clear configuration error
+[32m ✔ [0mInvalid credentials throws clear authentication error
+[32m ✔ [0mOrder creation throws exception on paypal error without silent simulation
+[32m ✔ [0mGenuine paypal capture sets is simulated false and marks order paid
+[32m ✔ [0mSimulated captures do not increment genuine recovered revenue
+[32m ✔ [0mReconciliation queries paypal api and syncs completed state
+[32m ✔ [0mNetwork timeout during capture transitions to requires reconciliation
+[32m ✔ [0mCurrency mismatch during capture is rejected
+[32m ✔ [0mUnapproved recovery checkout is strictly blocked
+[32m ✔ [0mCross merchant recovery opportunity access is blocked
+
+[4mRecovery Agent (Tests\Feature\RecoveryAgent)[0m
+[32m ✔ [0mScan identifies unrecovered dropoffs and scores recovery potential
+[32m ✔ [0mMerchant can approve opportunity and record audit trail
+[32m ✔ [0mMerchant can reject opportunity
+[32m ✔ [0mLaunch recovery checkout creates paypal order with recovery flag
+[32m ✔ [0mCapturing paypal order reconciles active recovery opportunity to recovered
+[32m ✔ [0mRecovery metrics endpoint aggregates deterministic pipeline totals
+
+[30;42mOK (24 tests, 117 assertions)[0m
+{"tool":"phpunit","result":"passed","tests":24,"passed":24,"assertions":117,"duration_ms":9307}

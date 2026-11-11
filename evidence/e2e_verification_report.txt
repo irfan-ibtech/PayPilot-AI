@@ -1,0 +1,73 @@
+
+======================================================
+ PAYPILOT AI - EXHAUSTIVE SYSTEM & CONNECTION AUDIT
+ Target API: http://127.0.0.1:8000/api
+ Time: 2026-11-11 19:26:44
+======================================================
+
+1. AUTHENTICATION & IDENTITY ENGINE
+  [32m✔[0m Merchant Login (POST /login) [90m(HTTP 200 in 184.8ms)[0m
+  [32m✔[0m User Identity Verification [90m(User ID: 1, Email: demo@paypilot.ai)[0m
+  [32m✔[0m Identity Session Profile (GET /me) [90m(Authenticated Merchant ID #1)[0m
+
+2. CORE COMMERCE - DASHBOARD & ANALYTICS OVERVIEW
+  [32m✔[0m Deterministic Analytics (GET /analytics/overview) [90m(Total Settled: $1554.5 (24 paid orders) in 10.4ms)[0m
+  [32m✔[0m 7-Day Daily Volume Metric Array [90m(7 days historical bucket)[0m
+  [32m✔[0m Top-Selling Revenue Drivers Aggregate [90m(5 catalog revenue drivers)[0m
+  [32m✔[0m Orders Ledger (GET /orders) [90m(43 order(s) retrieved in 19.8ms)[0m
+  [32m✔[0m Order & Item Inspector (GET /orders/{id}) [90m(Order #AUDIT-REC-DDC34B12 with 0 items)[0m
+
+3. CORE COMMERCE - PRODUCT CATALOG REGISTRY
+  [32m✔[0m Fetch Product Catalog (GET /products) [90m(5 SKUs registered)[0m
+  [32m✔[0m Create Catalog Product (POST /products) [90m(Created Product ID #18 with price $129.99)[0m
+  [32m✔[0m Update Catalog Product (PUT /products/{id}) [90m(Updated price to $119.50)[0m
+  [32m✔[0m Delete Catalog Product (DELETE /products/{id}) [90m(Cleaned up temporary SKU #18)[0m
+
+4. CORE COMMERCE - TRANSACTIONS LEDGER & PAYPAL RECORDS
+  [32m✔[0m Transactions Ledger (GET /payments) [90m(47 transaction record(s) logged in 15.3ms)[0m
+  [32m✔[0m Transaction Inspector & Payload (GET /payments/{id}) [90m(Tx #47 - PayPal Token: 5ED67904LY533984N)[0m
+
+5. INTELLIGENCE & AGENTS - AI ORDER ASSISTANT (GEMINI LIVE)
+  [32m✔[0m AI Natural Language Order Parsing (POST /ai/parse-order) [90m(Model: gemini_live in 3860.5ms)[0m
+  [32m✔[0m Catalog Match & BCMath Server Recalculation [90m(Total calculated strictly on server: $102.00 USD)[0m
+  [32m✔[0m Zero-Trust Adversarial Price Defense ($1.00 -> $85.00) [90m(Prompt had $1.00, server enforced authoritative catalog price $85.00)[0m
+  [32m✔[0m Confirm & Store Verified Order (POST /ai/confirm-order) [90m(Created Order #PP-W4UZPMT7 total: $69.00)[0m
+
+6. PAYPAL REST V2 INTEGRATION & PAYMENT VERIFICATION
+  [32m✔[0m PayPal Client Credentials (GET /payments/paypal/client-id) [90m(Mode: sandbox)[0m
+  [32m✔[0m Create PayPal v2 Order Token (POST /payments/paypal/{id}/create) [90m(PayPal Token: 51G28399WM8207401 in 1366.7ms)[0m
+  [32m✔[0m Server-Side PayPal Capture Verification (POST /payments/paypal/capture) [90m(PayPal rejected unapproved capture as required (HTTP 400))[0m
+  [32m✔[0m Order Status Integrity Enforcement [90m(Order #PP-W4UZPMT7 status correctly maintained as: PENDING)[0m
+
+7. INTELLIGENCE & AGENTS - REVENUE RECOVERY AGENT
+  [32m✔[0m Recovery Metrics Pipeline (GET /recovery/metrics) [90m(Pending: 4, Recoverable: $1,346.50)[0m
+  [32m✔[0m Autonomous Telemetry Scan (POST /recovery/scan) [90m(Scan message: Scan completed: 1 new recovery opportunities identified.)[0m
+  [32m✔[0m Recovery Opportunities List (GET /recovery/opportunities) [90m(21 recovery opportunities in pipeline)[0m
+  [32m✔[0m Live Gemini Opportunity Analysis (POST /recovery/opportunities/{id}/analyze) [90m(Model: Gemini Live in 3002.7ms)[0m
+  [32m✔[0m Merchant Approval Control (POST /recovery/opportunities/{id}/approve) [90m(Opportunity #21 status: APPROVED)[0m
+
+8. INTELLIGENCE & AGENTS - CFO BUSINESS COPILOT
+  [32m✔[0m Persisted Strategic Recommendations (GET /ai/copilot/recommendations) [90m(45 strategic actions on record)[0m
+  [32m✔[0m CFO Copilot Live Reasoning (POST /ai/copilot/ask) [90m(Model: gemini_live in 3453.4ms)[0m
+  [32m✔[0m Copilot Generated Action Recommendations [90m(3 actions generated)[0m
+
+9. FINTECH AUDIT TIMELINE & CONCURRENCY RECONCILIATION
+  [32m✔[0m Recovery Audit Events Timeline (GET /recovery/opportunities/{id}/events) [90m(3 recovery lifecycle events recorded)[0m
+  [32m✔[0m PayPal Concurrency-Safe Reconciliation (POST /payments/paypal/{id}/reconcile) [90m(Status 200: PayPal reports order status as 'CREATED'.)[0m
+
+10. MULTI-TENANT ISOLATION & SECURE BOUNDARIES
+  [32m✔[0m Multi-Tenant Recovery Isolation (Foreign recovery intervention blocked) [90m(HTTP 404 correctly denied cross-tenant execution)[0m
+  [32m✔[0m Multi-Tenant Product Isolation (IDOR blocked via 404) [90m(HTTP 404 correctly returned 404 Not Found)[0m
+
+11. ADVERSARIAL MATHEMATICS & RECOVERY GATE ENFORCEMENT
+  [32m✔[0m Multi-Currency ISO-4217 Scales & Half-Up Rounding [90m(USD: 10.56, JPY: 11, BHD: 1.235, KWD: 5.500)[0m
+  [32m✔[0m Zero-Trust Recovery Approval Gate (Unapproved checkout blocked) [90m(HTTP 400: Recovery checkout initialization failed: Opportunity must be approved by the merchant before launching recovery checkout (current status: PENDING).)[0m
+
+======================================================
+ AUDIT SUMMARY
+ Total Assertions Checked: 36
+ Passed: [32m36[0m
+ Failed: [32m0[0m
+ Success Rate: 100%
+======================================================
+

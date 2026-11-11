@@ -13,9 +13,26 @@ import Register from './pages/Register';
 
 const MainLayout: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
-  const [currentTab, setCurrentTab] = useState('dashboard');
+  const [currentTab, setCurrentTab] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const tab = new URLSearchParams(window.location.search).get('tab');
+      if (tab && ['dashboard', 'recovery', 'assistant', 'copilot', 'products', 'payments'].includes(tab)) {
+        return tab;
+      }
+    }
+    return 'dashboard';
+  });
   const [authView, setAuthView] = useState<'login' | 'register'>('login');
   const [assistantInitialPrompt, setAssistantInitialPrompt] = useState<string | undefined>(undefined);
+
+  const handleSelectTab = (tab: string) => {
+    setCurrentTab(tab);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', tab);
+      window.history.replaceState({}, '', url.toString());
+    }
+  };
 
   if (isLoading) {
     return (
@@ -40,19 +57,19 @@ const MainLayout: React.FC = () => {
     if (prompt) {
       setAssistantInitialPrompt(prompt);
     }
-    setCurrentTab('assistant');
+    handleSelectTab('assistant');
   };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      <Navbar currentTab={currentTab} onSelectTab={setCurrentTab} />
+      <Navbar currentTab={currentTab} onSelectTab={handleSelectTab} />
       <div className="flex-1 flex">
-        <Sidebar currentTab={currentTab} onSelectTab={setCurrentTab} />
+        <Sidebar currentTab={currentTab} onSelectTab={handleSelectTab} />
         <main className="flex-1 p-8 overflow-y-auto max-w-7xl">
           {currentTab === 'dashboard' && (
             <Dashboard
-              onNavigateCopilot={() => setCurrentTab('copilot')}
-              onNavigateRecovery={() => setCurrentTab('recovery')}
+              onNavigateCopilot={() => handleSelectTab('copilot')}
+              onNavigateRecovery={() => handleSelectTab('recovery')}
             />
           )}
           {currentTab === 'recovery' && (
@@ -60,14 +77,14 @@ const MainLayout: React.FC = () => {
           )}
           {currentTab === 'assistant' && (
             <OrderAssistant
-              onNavigateDashboard={() => setCurrentTab('dashboard')}
+              onNavigateDashboard={() => handleSelectTab('dashboard')}
               initialPrompt={assistantInitialPrompt}
             />
           )}
           {currentTab === 'copilot' && (
             <Copilot
-              onNavigateRecovery={() => setCurrentTab('recovery')}
-              onNavigateAssistant={() => setCurrentTab('assistant')}
+              onNavigateRecovery={() => handleSelectTab('recovery')}
+              onNavigateAssistant={() => handleSelectTab('assistant')}
             />
           )}
           {currentTab === 'products' && (

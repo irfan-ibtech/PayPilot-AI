@@ -1,0 +1,52 @@
+====================================================================
+PAYPILOT AI — INDEPENDENT FINTECH AUDITOR VERIFICATION RUNNER
+====================================================================
+
+
+--- [AUDIT 1] PayPal Sandbox OAuth2 Live Call ---
+[AUDIT EVIDENCE] PayPal OAuth2 Token Request | Ext: YES | HTTP: 200 | Result: PASS
+  > Details: Issued live access token (97 chars, expires in 32240s, app_id: APP-5GR90667DK539853T)
+
+--- [AUDIT 2] Genuine Order Creation via PayPal REST API v2 ---
+[AUDIT EVIDENCE] PayPal v2 Order Creation | Ext: YES | HTTP: 201 | Result: PASS
+  > Details: Order ID: 3U6588676H1862315, Status: CREATED, Approval URL: https://www.sandbox.paypal.com/checkoutnow?token=3U6588676H1862315
+
+--- [AUDIT 3] Direct Inquiry of Order State from PayPal REST API ---
+[AUDIT EVIDENCE] PayPal v2 Order Inquiry | Ext: YES | HTTP: 200 | Result: PASS
+  > Details: Status: CREATED, Intent: CAPTURE, Payee: sb-bkjtd53811564@business.example.com (AVPLZGAPLPXJG), Amount: 49.00 USD
+
+--- [AUDIT 4] Adversarial Test: Capture Unapproved Order ---
+[AUDIT EVIDENCE] Capture Unapproved Order (Adversarial) | Ext: YES | HTTP: 422 | Result: PASS (REJECTED AS REQUIRED)
+  > Details: PayPal returned HTTP 422 (ORDER_NOT_APPROVED). Confirms authentic PayPal business logic enforcement.
+
+--- [AUDIT 5] Backend Concurrency & Idempotency Guards ---
+[AUDIT EVIDENCE] Concurrent In-Flight Lock Protection | Ext: NO | HTTP: 409 | Result: PASS
+  > Details: Status CAPTURING claimed atomically. Second concurrent process receives HTTP 409 Conflict.
+[AUDIT EVIDENCE] Idempotent Second Capture Call | Ext: NO | HTTP: 200 | Result: PASS
+  > Details: Returns cached completed payment without re-invoking PayPal REST API.
+
+--- [AUDIT 6] Revenue Segregation Verification ---
+[AUDIT EVIDENCE] Analytics Revenue Segregation | Ext: NO | HTTP: 200 | Result: PASS
+  > Details: Genuine PayPal volume: $1128.5, Simulated volume: $426. Strictly partitioned in database aggregation.
+
+--- [AUDIT 7] Recovery Agent Authorization Gate ---
+[AUDIT EVIDENCE] Unapproved Recovery Checkout Block | Ext: NO | HTTP: 422 | Result: PASS
+  > Details: Status PENDING blocked from checkout generation. Merchant authorization gate enforced.
+[AUDIT EVIDENCE] Approved Recovery PayPal v2 Session | Ext: YES | HTTP: 200 | Result: PASS
+  > Details: Recovery PayPal Order ID: 5ED67904LY533984N, is_simulated: false
+
+====================================================================
+SUMMARY TABLE OF AUDIT EVIDENCE
+====================================================================
+Operation                           | External API Called?      | HTTP   | Result      
+-------------------------------------------------------------------------------------
+PayPal OAuth2 Token Request         | YES (api-m.sandbox.paypal.com) | 200    | PASS        
+PayPal v2 Order Creation            | YES (api-m.sandbox.paypal.com) | 201    | PASS        
+PayPal v2 Order Inquiry             | YES (api-m.sandbox.paypal.com) | 200    | PASS        
+Capture Unapproved Order (Adversari | YES (api-m.sandbox.paypal.com) | 422    | PASS (REJECTED AS REQUIRED)
+Concurrent In-Flight Lock Protectio | NO (Local Backend/DB)     | 409    | PASS        
+Idempotent Second Capture Call      | NO (Local Backend/DB)     | 200    | PASS        
+Analytics Revenue Segregation       | NO (Local Backend/DB)     | 200    | PASS        
+Unapproved Recovery Checkout Block  | NO (Local Backend/DB)     | 422    | PASS        
+Approved Recovery PayPal v2 Session | YES (api-m.sandbox.paypal.com) | 200    | PASS        
+====================================================================

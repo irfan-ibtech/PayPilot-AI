@@ -1,0 +1,64 @@
+{
+  "id": "3FL64688SL0637948",
+  "status": "COMPLETED",
+  "amount": {
+    "currency_code": "USD",
+    "value": "69.00"
+  },
+  "final_capture": true,
+  "seller_protection": {
+    "status": "ELIGIBLE",
+    "dispute_categories": [
+      "ITEM_NOT_RECEIVED",
+      "UNAUTHORIZED_TRANSACTION"
+    ]
+  },
+  "seller_receivable_breakdown": {
+    "gross_amount": {
+      "currency_code": "USD",
+      "value": "69.00"
+    },
+    "paypal_fee": {
+      "currency_code": "USD",
+      "value": "2.40"
+    },
+    "net_amount": {
+      "currency_code": "USD",
+      "value": "66.60"
+    }
+  },
+  "multi_currency_settlement": {
+    "settlement_currency": "PHP",
+    "exchange_rate": "59.318261",
+    "settlement_amount": "4092.96",
+    "precision_standard": "BCMath Zero-Float Half-Up"
+  },
+  "supplementary_data": {
+    "related_ids": {
+      "order_id": "8UX81126AK7595001"
+    }
+  },
+  "payee": {
+    "email_address": "merchant-sanitized@paypilot.ai",
+    "merchant_id": "AVPLZGAPLPXJG"
+  },
+  "create_time": "2026-11-09T17:15:30Z",
+  "update_time": "2026-11-09T17:15:32Z",
+  "links": [
+    {
+      "href": "https://api.sandbox.paypal.com/v2/payments/captures/3FL64688SL0637948",
+      "rel": "self",
+      "method": "GET"
+    },
+    {
+      "href": "https://api.sandbox.paypal.com/v2/payments/captures/3FL64688SL0637948/refund",
+      "rel": "refund",
+      "method": "POST"
+    },
+    {
+      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/8UX81126AK7595001",
+      "rel": "up",
+      "method": "GET"
+    }
+  ]
+}
