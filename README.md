@@ -1,6 +1,10 @@
 # PayPilot AI 🚀
 ### Enterprise AI Revenue Recovery, Human-Authorized Commerce & PayPal v2 Settlement Platform
 
+<p align="center">
+  <img src="thumbnail.jpg" alt="PayPilot AI - PayPal AI Hackathon 2026 Submission Banner" width="100%" />
+</p>
+
 [![PayPal REST API](https://img.shields.io/badge/PayPal-REST%20API%20v2%20(Sandbox)-003087?style=for-the-badge&logo=paypal&logoColor=white)](https://developer.paypal.com/)
 [![Google Gemini](https://img.shields.io/badge/Google%20Gemini-3.1%20Flash%20Lite-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
 [![Laravel](https://img.shields.io/badge/Laravel-12.x-FF2D20?style=for-the-badge&logo=laravel&logoColor=white)](https://laravel.com/)
