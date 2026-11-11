@@ -241,4 +241,41 @@ class PaymentSecurityTest extends TestCase
         $this->assertTrue($item['catalog_matched']);
         $this->assertEquals('499.00', $data['total']);
     }
+
+    /**
+     * Test 6: Buyer cancellation marks checkout abandoned and payment attempt as failed.
+     */
+    public function test_buyer_checkout_cancellation_marks_abandoned_and_payment_failed(): void
+    {
+        $user = User::factory()->create();
+        $order = Order::create([
+            'user_id' => $user->id,
+            'order_number' => 'PP-CANCEL-001',
+            'subtotal' => '85.00',
+            'total' => '85.00',
+            'currency' => 'USD',
+            'status' => 'PENDING',
+        ]);
+
+        $payment = Payment::create([
+            'order_id' => $order->id,
+            'user_id' => $user->id,
+            'provider' => 'paypal',
+            'paypal_order_id' => 'PAYPAL-CANCEL-TEST',
+            'amount' => '85.00',
+            'currency' => 'USD',
+            'status' => 'CREATED',
+            'attempt_number' => 1,
+        ]);
+
+        $response = $this->actingAs($user)->postJson("/api/payments/paypal/{$order->id}/cancel");
+        $response->assertStatus(200);
+
+        $order->refresh();
+        $payment->refresh();
+
+        $this->assertNotNull($order->checkout_abandoned_at);
+        $this->assertEquals('FAILED', $payment->status);
+        $this->assertStringContainsString('Buyer cancelled checkout', $payment->failure_reason);
+    }
 }

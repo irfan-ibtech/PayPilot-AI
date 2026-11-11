@@ -46,6 +46,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // PayPal Verification & Capture Engine
     Route::get('/payments/paypal/client-id', [PaymentController::class, 'getPayPalClientId']);
     Route::post('/payments/paypal/{orderId}/create', [PaymentController::class, 'createPayPalOrder']);
+    Route::post('/payments/paypal/{orderId}/cancel', [PaymentController::class, 'cancelCheckout']);
     Route::post('/payments/paypal/capture', [PaymentController::class, 'capturePayPalOrder']);
     Route::post('/payments/paypal/{paypalOrderId}/reconcile', [PaymentController::class, 'reconcilePayment']);
     Route::get('/payments', [PaymentController::class, 'index']);

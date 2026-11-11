@@ -128,6 +128,55 @@ class PaymentController extends Controller
     }
 
     /**
+     * Record buyer cancellation / abandonment of a checkout attempt.
+     */
+    public function cancelCheckout(Request $request, $orderId): JsonResponse
+    {
+        $order = Order::where('user_id', $request->user()->id)
+            ->where('id', $orderId)
+            ->firstOrFail();
+
+        if ($order->status === 'PAID') {
+            return response()->json(['message' => 'Order is already paid.'], 400);
+        }
+
+        $order->update([
+            'checkout_abandoned_at' => now(),
+        ]);
+
+        $latestPayment = $order->payments()->latest('id')->first();
+        if ($latestPayment && $latestPayment->status === 'CREATED') {
+            $latestPayment->update([
+                'status' => 'FAILED',
+                'failure_reason' => 'Buyer cancelled checkout during PayPal authorization',
+            ]);
+        }
+
+        PaymentEvent::log(
+            $request->user()->id,
+            $order->id,
+            'CHECKOUT_CANCELLED',
+            'BUYER_ACTION',
+            "Buyer cancelled PayPal checkout for Order #{$order->order_number}.",
+            [
+                'order_id' => $order->id,
+                'paypal_order_id' => $latestPayment?->paypal_order_id,
+            ],
+            $latestPayment?->id
+        );
+
+        // Run recovery opportunity scan for merchant immediately
+        $recoveryService = app(\App\Services\RecoveryAgentService::class);
+        $discovered = $recoveryService->scanOpportunities($request->user()->id);
+
+        return response()->json([
+            'message' => 'Checkout marked as cancelled and flagged for revenue recovery.',
+            'order' => $order->fresh(['items', 'payments']),
+            'recovery_discovered' => count($discovered),
+        ]);
+    }
+
+    /**
      * Capture payment for an approved PayPal order with decoupled 3-step concurrency safety:
      * 1. Short atomic lock to claim attempt and prevent double submission
      * 2. External HTTP call to PayPal REST API v2 (OUTSIDE database transaction)

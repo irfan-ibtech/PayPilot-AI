@@ -141,7 +141,21 @@ export const RevenueRecovery: React.FC = () => {
   };
 
   useEffect(() => {
-    loadData(activeTab);
+    let isMounted = true;
+    const syncAndLoad = async () => {
+      try {
+        await api.post('/recovery/scan');
+      } catch {
+        // Fallback gracefully to existing records
+      }
+      if (isMounted) {
+        await loadData(activeTab);
+      }
+    };
+    syncAndLoad();
+    return () => {
+      isMounted = false;
+    };
   }, [activeTab]);
 
   useEffect(() => {

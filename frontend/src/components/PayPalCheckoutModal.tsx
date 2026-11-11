@@ -94,7 +94,12 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
       <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl relative text-slate-100 max-h-[90vh] overflow-y-auto">
         {/* Close Button */}
         <button
-          onClick={onClose}
+          onClick={() => {
+            if (!completedPayment && order?.id) {
+              api.post(`/payments/paypal/${order.id}/cancel`).catch(() => {});
+            }
+            onClose();
+          }}
           className="absolute top-5 right-5 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
         >
           <X className="h-5 w-5" />
@@ -291,8 +296,15 @@ export const PayPalCheckoutModal: React.FC<PayPalCheckoutModalProps> = ({
                       console.error('PayPal Buttons Error', err);
                       setErrorMessage('PayPal checkout encountered an error. Please try again.');
                     }}
-                    onCancel={() => {
+                    onCancel={async () => {
                       setWarningMessage('PayPal checkout was cancelled.');
+                      if (order?.id) {
+                        try {
+                          await api.post(`/payments/paypal/${order.id}/cancel`);
+                        } catch (e) {
+                          console.error('Failed to log checkout cancellation', e);
+                        }
+                      }
                     }}
                   />
                 </PayPalScriptProvider>
